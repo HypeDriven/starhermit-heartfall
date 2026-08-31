@@ -1,0 +1,48 @@
+/* Heartfall — base styles */
+:root { --bg:#0d1526; --panel:#141f38; --line:#2a3c5e; --text:#dbe7ff; --dim:#9fb0cc; }
+
+* { box-sizing:border-box; margin:0; padding:0; }
+html,body { height:100%; background:var(--bg); color:var(--text); font-family:"Segoe UI",system-ui,sans-serif; overflow:hidden; }
+.hidden { display:none !important; }
+#app, .screen { width:100vw; height:100vh; }
+
+h1,h2,h3 { font-weight:600; letter-spacing:.5px; }
+.game-title { font-size:48px; text-align:center; margin-top:9vh; color:#fff; }
+.tagline { text-align:center; color:var(--dim); margin-top:10px; font-style:italic; }
+
+.menu { width:min(62vw,520px); margin:34px auto 0; display:flex; flex-direction:column; gap:10px; }
+.subrow { display:flex; justify-content:center; align-items:center; gap:8px; color:#fff; font-size:15px; padding-top:6px;}
+
+button { background:#233a6b; border:none; color:#eaf1ff; padding:9px 14px; cursor:pointer; font-size:15px; }
+button.primary.big, button.big { width:min(70vw,480px); padding:13px; font-size:18px; background:#2f6fd0; color:#fff;}
+button.mode-card.big { display:block; width:min(90vw,560px); margin:10px auto 0; padding:14px; text-align:left; line-height:1.7;}
+
+.bar { height:58px; display:flex; align-items:center; gap:12px; }
+.bar button { width:44px; height:44px; font-size:20px; background:#3a4f7d;}
+.panel, .help-panel { padding:6px 18px 18px; overflow-y:auto; max-height:calc(100vh - 58px);}
+.lead { color:var(--dim); margin-bottom:12px; }
+
+.list li { list-style:none; border-top:1px solid var(--line); padding:9px 4px; display:flex; justify-content:space-between;}
+.list .done { color:#7fd8a0; font-weight:bold;}
+
+.settings-panel fieldset, .help-panel fieldset { border:1px solid #3a5a8c; margin-bottom:12px; padding:10px 14px;}
+.settings-panel legend, .help-panel legend { color:#fff; padding-left:6px;}
+label { display:block; margin-top:8px;} input[type=range]{ width:100%;}
+.chk { display:flex; gap:8px; align-items:center;}
+
+#play-wrap { position:relative; width:100vw; height:100vh; }
+#game-canvas { position:absolute; inset:0; width:100%; height:100%; display:block;}
+
+#hud-top, #hud-bottom { position:absolute; left:50%; transform:translateX(-50%); text-align:center;}
+#hud-top { top:8px; } #obj-title{ font-size:24px;} #objective{ color:#cfe0ff;}
+.scores .srow { display:flex; gap:16px; justify-content:center; margin-top:6px;}
+
+.cards { position:absolute; bottom:10px; left:50%; transform:translateX(-50%); display:flex;}
+.card { width:74px; height:98px; background:#f2f5fa; color:#1a2340; border-radius:6px; margin-left:-18px; padding-top:8px; font-size:20px; box-shadow:0 2px 6px rgba(0,0,0,.4);}
+.card.sel { outline:3px solid #ffd54a;} .card.dim{ opacity:.5;}
+
+.btns { position:absolute; bottom:118px; left:50%; transform:translateX(-50%); display:flex; gap:10px;}
+.btns button { padding:9px 20px;}
+
+.toast { position:absolute; top:46vh; left:50%; transform:translate(-50%,-50%); background:#3a2f5e; color:#fff; padding:8px 18px;}
+.overlay { position:absolute; inset:0; background:rgba(8,12,24,.78);}

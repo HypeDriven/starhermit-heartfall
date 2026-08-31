@@ -1,0 +1,110 @@
+[
+  {
+    "name": "ui-click",
+    "seconds": 1,
+    "prompt": "A soft fingertip tap on a polished wooden button, short warm tick with a gentle room ambience.",
+    "event": "ui-click"
+  },
+  {
+    "name": "ui-back",
+    "seconds": 1,
+    "prompt": "A muted wooden toggle flicking back, soft low knock with a brief felt brush.",
+    "event": "ui-back"
+  },
+  {
+    "name": "pause",
+    "seconds": 1,
+    "prompt": "A heavy velvet curtain drawn halfway closed, soft fabric hush ending in a low gentle thump.",
+    "event": "pause"
+  },
+  {
+    "name": "card-select",
+    "seconds": 1,
+    "prompt": "A single playing card lifted from a felt card table, crisp paper snap with a light finger slide.",
+    "event": "card-select"
+  },
+  {
+    "name": "card-play",
+    "seconds": 1,
+    "prompt": "A playing card placed firmly face-up onto a felt card table, sharp paper slap with a soft fabric thud.",
+    "event": "card-play"
+  },
+  {
+    "name": "card-pass",
+    "seconds": 1,
+    "prompt": "Three playing cards slid across green felt in one smooth motion, sustained soft paper whisper.",
+    "event": "card-pass"
+  },
+  {
+    "name": "cards-deal",
+    "seconds": 2,
+    "prompt": "Playing cards dealt quickly one by one onto a wooden table, a rapid series of light paper snaps.",
+    "event": "cards-deal"
+  },
+  {
+    "name": "invalid",
+    "seconds": 1,
+    "prompt": "A knuckle rapping twice on a wooden table edge, dull short warning knocks.",
+    "event": "invalid"
+  },
+  {
+    "name": "turn-prompt",
+    "seconds": 1,
+    "prompt": "A small brass bell chimed once softly, gentle high ring with a quick natural decay.",
+    "event": "turn-prompt"
+  },
+  {
+    "name": "hint",
+    "seconds": 1,
+    "prompt": "A fingernail tapping once on a glass conservatory pane, bright delicate ting.",
+    "event": "hint"
+  },
+  {
+    "name": "undo",
+    "seconds": 1,
+    "prompt": "A playing card drawn back across felt toward the player's hand, soft dragging paper slide.",
+    "event": "undo"
+  },
+  {
+    "name": "trick-take",
+    "seconds": 2,
+    "prompt": "A small stack of playing cards gathered and scooped across felt into a neat pile, layered paper slides ending with a soft tap.",
+    "event": "trick-take"
+  },
+  {
+    "name": "heart-taken",
+    "seconds": 1,
+    "prompt": "A single card dropped onto a pile with a soft heavy landing, muted paper thud with low warmth.",
+    "event": "heart-taken"
+  },
+  {
+    "name": "queen-taken",
+    "seconds": 2,
+    "prompt": "A heavy card placed slowly and deliberately onto a wooden table, deep paper thud with a low room resonance.",
+    "event": "queen-taken"
+  },
+  {
+    "name": "eclipse",
+    "seconds": 3,
+    "prompt": "A full deck of cards fanned and swept in a wide arc across a table, dramatic cascading paper flourish.",
+    "event": "eclipse"
+  },
+  {
+    "name": "round-end",
+    "seconds": 2,
+    "prompt": "A neat stack of cards squared up and tapped twice on the table, tidy paper taps with a settling shuffle.",
+    "event": "round-end"
+  },
+  {
+    "name": "match-win",
+    "seconds": 3,
+    "prompt": "A celebratory cascade of cards riffled and sprung between two hands, bright fluttering paper crescendo.",
+    "event": "match-win"
+  },
+  {
+    "name": "match-lose",
+    "seconds": 3,
+    "prompt": "Cards slowly gathered and stacked in near silence, slow deliberate paper slides ending in a single soft thud.",
+    "event": "match-lose"
+  }
+]

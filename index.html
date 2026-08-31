@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Heartfall</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/css/style.css">
+<script src="/js/three.min.js"></script>
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ TITLE / HOME ============ -->
+  <section id="screen-title" class="screen" aria-label="Heartfall home">
+    <div class="title-wrap">
+      <h1 class="game-title">HEARTFALL</h1>
+      <p class="tagline">A moonlit conservatory card table.</p>
+      <nav class="menu" aria-label="Main menu">
+        <button id="btn-play" class="primary big">Play</button>
+        <div class="subrow">
+          <button data-nav="daily">Daily Challenge</button>
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+          <button data-nav="journey">Journey</button>
+        </div>
+      </nav>
+    </div>
+  </section>
+
+  <!-- ============ MODE SELECT ============ -->
+  <section id="screen-modes" class="screen hidden" aria-label="Mode select">
+    <header class="bar"><button data-nav="back">&larr;</button><h2>Modes</h2></header>
+    <div class="modes">
+      <button data-mode="learn" class="mode-card big">Learn<span>Tutorial &mdash; the rules, one at a time.</span></button>
+      <button data-mode="journey" class="mode-card big">Journey<span>An authored path through 40 stages.</span></button>
+      <button data-mode="daily" class="mode-card big">Daily Challenge<span>One shared table for everyone, today only.</span></button>
+      <button data-mode="practice" class="mode-card big">Practice<span>Select your difficulty. Undo and hints allowed.</span></button>
+      <button data-mode="challenge" class="mode-card big">Challenge<span>Six constrained tables with their own rules.</span></button>
+    </div>
+  </section>
+
+  <!-- ============ LEARN (tutorial) ============ -->
+  <section id="screen-learn" class="screen hidden" aria-label="Learn">
+    <header class="bar"><button data-nav="back">&larr;</button><h2>Learn</h2></header>
+    <div class="panel">
+      <p class="lead">Six lessons. Each one isolates a single rule; perform the action to continue.</p>
+      <ul id="learn-list" class="list"></ul>
+    </div>
+  </section>
+
+  <!-- ============ JOURNEY (40 stages) ============ -->
+  <section id="screen-journey" class="screen hidden" aria-label="Journey">
+    <header class="bar"><button data-nav="back">&larr;</button><h2>Journey</h2></header>
+    <div class="panel">
+      <p class="lead">Forty stages. The conservatory keeps its own ledger.</p>
+      <ul id="journey-list" class="list"></ul>
+    </div>
+  </section>
+
+  <!-- ============ DAILY (7 days) ============ -->
+  <section id="screen-daily" class="screen hidden" aria-label="Daily">
+    <header class="bar"><button data-nav="back">&larr;</button><h2>Daily Challenge</h2></header>
+    <div class="panel">
+      <p class="lead">Seven days, one table each. The rules change with the moon.</p>
+      <ul id="daily-list" class="list"></ul>
+    </div>
+  </section>
+
+  <!-- ============ PRACTICE (3 presets) ============ -->
+  <section id="screen-practice" class="screen hidden" aria-label="Practice">
+    <header class="bar"><button data-nav="back">&larr;</button><h2>Practice</h2></header>
+    <div class="panel">
+      <p class="lead">Three tables. Undo and hints are on.</p>
+      <ul id="practice-list" class="list"></ul>
+    </div>
+  </section>
+
+  <!-- ============ CHALLENGE (6) ============ -->
+  <section id="screen-challenge" class="screen hidden" aria-label="Challenge">
+    <header class="bar"><button data-nav="back">&larr;</button><h2>Challenge</h2></header>
+    <div class="panel">
+      <p class="lead">Six tables, each with its own rules and its own price.</p>
+      <ul id="challenge-list" class="list"></ul>
+    </div>
+  </section>
+
+  <!-- ============ SETTINGS ============ -->
+  <section id="screen-settings" class="screen hidden" aria-label="Settings">
+    <header class="bar"><button data-nav="back">&larr;</button><h2>Settings</h2></header>
+    <div class="panel settings-panel">
+      <fieldset><legend>Audio</legend>
+        <label>Music<input type="range" id="set-music" min="0" max="100"></label>
+        <label>Effects<input type="range" id="set-sfx" min="0" max="100"></label>
+      </fieldset>
+      <fieldset><legend>Graphics</legend>
+        <div class="seg" role="radiogroup" aria-label="Quality">
+          <button data-q="low">Low</button><button data-q="medium">Medium</button><button data-q="high">High</button>
+        </div>
+      </fieldset>
+      <fieldset><legend>Motion &amp; text</legend>
+        <label class="chk"><input type="checkbox" id="set-reduced-motion"> Reduced motion</label>
+        <label class="chk"><input type="checkbox" id="set-large-text"> Larger text</label>
+      </fieldset>
+    </div>
+  </section>
+
+  <!-- ============ HELP ============ -->
+  <section id="screen-help" class="screen hidden" aria-label="Help">
+    <header class="bar"><button data-nav="back">&larr;</button><h2>Help</h2></header>
+    <div class="panel help-panel"></div>
+  </section>
+
+  <!-- ============ PLAY (canvas + HUD) ============ -->
+  <section id="screen-play" class="screen hidden" aria-label="Play">
+    <div id="play-wrap">
+      <canvas id="game-canvas" width="960" height="540"></canvas>
+
+      <!-- top bar: objective + scores -->
+      <header id="hud-top" class="hidden">
+        <h2 id="obj-title">Heartfall</h2>
+        <p id="objective" aria-live="polite"></p>
+        <div id="scores" class="scores"></div>
+      </header>
+
+      <!-- bottom: hand + actions -->
+      <footer id="hud-bottom" class="hidden">
+        <ul id="hand" class="cards" aria-label="Your cards"></ul>
+        <div id="actions" class="btns"></div>
+      </footer>
+
+      <!-- toast (invalid action / info) -->
+      <p id="toast" class="toast hidden" role="status" aria-live="polite"></p>
+
+      <!-- pause overlay -->
+      <div id="pause-overlay" class="overlay hidden">
+        <h2>Paused</h2>
+        <nav class="menu">
+          <button data-act="resume" class="primary big">Resume</button>
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+          <button data-act="settings">Settings</button>
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+          <button data-act="leave">Leave to title</button>
+        </nav>
+      </div>
+
+      <!-- results overlay -->
+      <div id="results-overlay" class="overlay hidden"></div>
+    </div>
+  </section>
+
+</div>
+<script src="/js/game.js"></script>
+</body>
+</html>
