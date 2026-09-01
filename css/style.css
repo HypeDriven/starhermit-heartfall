@@ -34,15 +34,23 @@ label { display:block; margin-top:8px;} input[type=range]{ width:100%;}
 #game-canvas { position:absolute; inset:0; width:100%; height:100%; display:block;}
 
 #hud-top, #hud-bottom { position:absolute; left:50%; transform:translateX(-50%); text-align:center;}
-#hud-top { top:8px; } #obj-title{ font-size:24px;} #objective{ color:#cfe0ff;}
+#hud-top { top:8px; } #obj-title{ font-size:24px; margin:0;} #objective{ color:#cfe0ff; margin:2px 0 4px;}
+#hud-bottom { bottom:6px; display:flex; flex-direction:column-reverse; align-items:center; gap:8px;}
 .scores .srow { display:flex; gap:16px; justify-content:center; margin-top:6px;}
+.scores .score.turn { color:#f7c948; }
 
-.cards { position:absolute; bottom:10px; left:50%; transform:translateX(-50%); display:flex;}
-.card { width:74px; height:98px; background:#f2f5fa; color:#1a2340; border-radius:6px; margin-left:-18px; padding-top:8px; font-size:20px; box-shadow:0 2px 6px rgba(0,0,0,.4);}
+.cards { display:flex; justify-content:center; margin:0; padding:0; list-style:none;}
+.card { width:74px; height:98px; background:#f2f5fa; color:#1a2340; border-radius:6px; margin-left:-18px; padding-top:8px; font-size:20px; box-shadow:0 2px 6px rgba(0,0,0,.4); cursor:pointer; list-style:none;}
+.card:first-child { margin-left:0;}
 .card.sel { outline:3px solid #ffd54a;} .card.dim{ opacity:.5;}
+.card.penalty { color:#b3372c;} .card.hint { outline:3px solid #7fd4ff;}
 
-.btns { position:absolute; bottom:118px; left:50%; transform:translateX(-50%); display:flex; gap:10px;}
+.btns { display:flex; gap:10px; justify-content:center;}
 .btns button { padding:9px 20px;}
+
+@media (max-width:700px) {
+  .card { width:44px; height:62px; font-size:14px; margin-left:-16px; padding-top:4px;}
+}
 
 .toast { position:absolute; top:46vh; left:50%; transform:translate(-50%,-50%); background:#3a2f5e; color:#fff; padding:8px 18px;}
 .overlay { position:absolute; inset:0; background:rgba(8,12,24,.78);}

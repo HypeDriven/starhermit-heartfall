@@ -185,8 +185,6 @@ function renderJourney() {
   var ul = $('journey-list'); ul.innerHTML='';
   Content.JOURNEY.forEach(function (lv) {
     var li=document.createElement('li'); li.textContent=lv.name; ul.appendChild(li);
-    if (!done || !done.journey || done.journey[lv.id]) return;
-    var d=document.createElement('span'); d.className='dim'; d.textContent=stageStatus(lv,null); li.appendChild(d);
   });
 }
 function renderDaily() {
@@ -223,8 +221,325 @@ function isPenaltyCard(id){ return Rules.isPenalty(id); }
 var Render = window.HFRender || null;
 
 function startPlay(mode, id) {
-  var level=levelFor(mode,id); S={mode:mode,id:id,level:level}; sess={game:Rules.createGame(level.cfg),passSel:[],hintCard:null,undoStack:[]}; showScreen('play');
+  var level=levelFor(mode,id);
+  var cfg = level.cfg || level;
+  if (cfg.seed === undefined) {
+    cfg = Object.assign({}, cfg, { seed: window.HFRNG.hashString('heartfall-' + mode + '-' + (cfg.id || id)) });
+  }
+  S={mode:mode,id:id,level:level};
+  sess={game:Rules.createGame(cfg),passSel:[],hintCard:null,undoStack:[],resultsShown:false};
+  pumpToken++;
+  $('hud-top').classList.remove('hidden');
+  $('hud-bottom').classList.remove('hidden');
+  $('results-overlay').classList.add('hidden');
+  $('pause-overlay').classList.add('hidden');
+  $('obj-title').textContent = level.name || 'Heartfall';
+  showScreen('play');
+  playSfx('cards-deal');
+  syncUI();
+  aiPump();
 }
+
+// ---------- play-screen rendering & turn loop ----------
+var pumpToken = 0;
+
+function toast(msg) {
+  var t = $('toast');
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  clearTimeout(toast._h);
+  toast._h = setTimeout(function () { t.classList.add('hidden'); }, 2200);
+}
+
+function objectiveText() {
+  var g = sess.game;
+  if (g.phase === 'pass') return 'Pass ' + g.cfg.passCount + ' card' + (g.cfg.passCount === 1 ? '' : 's') + ' ' + String(g.passDir || '') + '.';
+  if (g.phase === 'play') return g.actor === 0 ? 'Your turn — play a card.' : seatLabel(g.actor) + ' is thinking…';
+  return 'Match over.';
+}
+
+function renderScores() {
+  var g = sess.game, box = $('scores');
+  box.innerHTML = '';
+  var row = document.createElement('div');
+  row.className = 'srow';
+  for (var p = 0; p < g.players; p++) {
+    var d = document.createElement('span');
+    d.className = 'score' + (p === g.actor && g.phase === 'play' ? ' turn' : '');
+    d.textContent = seatLabel(p) + ': ' + g.matchScores[p];
+    row.appendChild(d);
+  }
+  box.appendChild(row);
+}
+
+function renderHand() {
+  var g = sess.game, ul = $('hand');
+  ul.innerHTML = '';
+  var legal = (g.phase === 'play' && g.actor === 0) ? Rules.legalPlays(g, 0) : [];
+  g.hands[0].forEach(function (c) {
+    var li = document.createElement('li');
+    li.textContent = cardLabel(c);
+    li.dataset.card = c;
+    li.className = 'card';
+    if (isPenaltyCard(c)) li.classList.add('penalty');
+    if (sess.passSel.indexOf(c) >= 0) li.classList.add('sel');
+    if (sess.hintCard === c) li.classList.add('hint');
+    if (g.phase === 'play' && g.actor === 0 && legal.indexOf(c) < 0) li.classList.add('dim');
+    ul.appendChild(li);
+  });
+}
+
+function renderActions() {
+  var g = sess.game, box = $('actions');
+  box.innerHTML = '';
+  function btn(label, cls, fn) {
+    var b = document.createElement('button');
+    b.textContent = label; if (cls) b.className = cls;
+    b.addEventListener('click', fn);
+    box.appendChild(b);
+  }
+  if (g.phase === 'pass' && !g.passes[0]) {
+    btn('Pass ' + sess.passSel.length + '/' + g.cfg.passCount, 'primary', function () {
+      if (sess.passSel.length !== g.cfg.passCount) { playSfx('invalid'); toast('Select ' + g.cfg.passCount + ' cards to pass.'); return; }
+      var reason = Rules.checkPass(g, 0, sess.passSel);
+      if (reason) { playSfx('invalid'); toast(reason); return; }
+      sess.undoStack.push(Rules.serialize(g));
+      var r = Rules.applyCommand(g, { type: 'pass', p: 0, cards: sess.passSel.slice() });
+      if (!r.ok) { playSfx('invalid'); toast(r.reason || 'Cannot pass those.'); return; }
+      sess.game = r.state; sess.passSel = []; sess.hintCard = null;
+      playSfx('card-pass');
+      syncUI(); aiPump();
+    });
+  }
+  if (S.mode === 'practice' || S.mode === 'learn') {
+    btn('Hint', '', function () {
+      var h = Rules.hint(sess.game, 0);
+      if (!h) return;
+      sess.hintCard = h.kind === 'play' ? h.card : null;
+      if (h.kind === 'pass') sess.passSel = h.cards.slice();
+      playSfx('hint');
+      toast(h.why || 'Try this.');
+      syncUI();
+    });
+    btn('Undo', '', function () {
+      var prev = sess.undoStack.pop();
+      if (!prev) { playSfx('invalid'); toast('Nothing to undo.'); return; }
+      sess.game = Rules.deserialize(prev);
+      sess.passSel = []; sess.hintCard = null;
+      playSfx('undo');
+      syncUI();
+    });
+  }
+}
+
+function seatPos(i, n, w, h) {
+  // seat 0 at bottom centre; others spread around the table
+  var spots = {
+    2: [[0.5, 0.86], [0.5, 0.24]],
+    3: [[0.5, 0.86], [0.12, 0.32], [0.88, 0.32]],
+    4: [[0.5, 0.86], [0.1, 0.45], [0.5, 0.22], [0.9, 0.45]]
+  };
+  var s = (spots[n] || spots[4])[i];
+  return [s[0] * w, s[1] * h];
+}
+
+function drawTable() {
+  var cv = $('game-canvas');
+  if (!cv || !sess) return;
+  if (cv.clientWidth > 0 && (cv.width !== cv.clientWidth || cv.height !== cv.clientHeight)) {
+    cv.width = cv.clientWidth; cv.height = cv.clientHeight;
+  }
+  var ctx = cv.getContext('2d');
+  var w = cv.width, h = cv.height;
+  ctx.fillStyle = '#17251d';
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#1f3328';
+  ctx.beginPath(); ctx.ellipse(w / 2, h / 2, w * 0.38, h * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+  if (!sess.game) return;
+  var g = sess.game;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (var p = 0; p < g.players; p++) {
+    var pos = seatPos(p, g.players, w, h);
+    ctx.fillStyle = (g.phase === 'play' && g.actor === p) ? '#f7c948' : '#cfd8d2';
+    ctx.font = '15px system-ui, sans-serif';
+    ctx.fillText(seatLabel(p) + ' (' + g.hands[p].length + ')', pos[0], pos[1] - 24);
+  }
+  // current trick around the centre
+  ctx.font = '26px system-ui, sans-serif';
+  g.trick.forEach(function (e, i) {
+    var pos = seatPos(e.p, g.players, w, h);
+    var cx = w / 2 + (pos[0] - w / 2) * 0.35, cy = h / 2 + (pos[1] - h / 2) * 0.35;
+    ctx.fillStyle = '#f4f1e8';
+    ctx.fillRect(cx - 24, cy - 34, 48, 68);
+    ctx.fillStyle = Rules.cardSuit(e.card) === 1 || Rules.cardSuit(e.card) === 2 ? '#b3372c' : '#222831';
+    ctx.fillText(cardLabel(e.card), cx, cy);
+  });
+  ctx.font = '13px system-ui, sans-serif';
+  ctx.fillStyle = '#9db3a6';
+  ctx.fillText('Round ' + g.round + (g.heartsBroken ? ' · hearts broken' : ''), w / 2, h - 14);
+}
+
+function syncUI() {
+  if (!sess || !sess.game) return;
+  $('objective').textContent = objectiveText();
+  renderScores();
+  renderHand();
+  renderActions();
+  drawTable();
+  if (sess.game.phase === 'done' && !sess.resultsShown) {
+    sess.resultsShown = true;
+    showResults();
+  }
+}
+
+function aiPump() {
+  var token = pumpToken;
+  function step() {
+    if (token !== pumpToken || !sess || !sess.game || sess.game.phase === 'done') return;
+    var g = sess.game;
+    if (g.phase === 'pass' && g.passes[0] === null && g.actor === 0) return; // waiting for human pass
+    if (g.phase === 'play' && g.actor === 0) { syncUI(); return; }          // waiting for human play
+    var cmd = Rules.aiChoose(g, g.actor);
+    if (!cmd) return;
+    var r = Rules.applyCommand(g, cmd);
+    if (!r.ok) return;
+    sess.game = r.state;
+    r.events.forEach(function (e) {
+      if (e.type === 'trick') playSfx(e.winner === 0 ? 'trick-take' : 'card-play');
+      if (e.type === 'eclipse') playSfx('eclipse');
+      if (e.type === 'round-end') playSfx('round-end');
+    });
+    syncUI();
+    setTimeout(step, 450);
+  }
+  setTimeout(step, 450);
+}
+
+function onHandClick(e) {
+  var li = e.target && e.target.closest ? e.target.closest('li') : null;
+  if (!li || !sess || !sess.game) return;
+  var card = Number(li.dataset.card);
+  var g = sess.game;
+  if (g.phase === 'pass' && !g.passes[0]) {
+    var i = sess.passSel.indexOf(card);
+    if (i >= 0) sess.passSel.splice(i, 1);
+    else if (sess.passSel.length < g.cfg.passCount) sess.passSel.push(card);
+    else { playSfx('invalid'); toast('Only ' + g.cfg.passCount + ' cards.'); return; }
+    sess.hintCard = null;
+    playSfx('card-select');
+    syncUI();
+    return;
+  }
+  if (g.phase === 'play' && g.actor === 0) {
+    var reason = Rules.checkPlay(g, 0, card);
+    if (reason) { playSfx('invalid'); toast(reason); return; }
+    sess.undoStack.push(Rules.serialize(g));
+    var r = Rules.applyCommand(g, { type: 'play', p: 0, card: card });
+    if (!r.ok) { playSfx('invalid'); toast(r.reason || 'Cannot play that.'); return; }
+    sess.game = r.state; sess.hintCard = null;
+    playSfx('card-play');
+    syncUI(); aiPump();
+  }
+}
+
+function showResults() {
+  var g = sess.game, ov = $('results-overlay');
+  var t = g.terminal;
+  var rows = t.scores.map(function (s, p) {
+    return '<div class="score-row' + (t.winners.indexOf(p) >= 0 ? ' winner' : '') + '">' + seatLabel(p) + ': ' + s + '</div>';
+  }).join('');
+  var head = t.winners.indexOf(0) >= 0 ? 'You win the table.' : seatLabel(t.winner) + ' takes the table.';
+  playSfx(t.winners.indexOf(0) >= 0 ? 'match-win' : 'match-lose');
+  ov.innerHTML = '<h2>' + head + '</h2><div class="panel">' + rows + '</div>' +
+    '<nav class="menu"><button data-act="again" class="primary big">Play again</button>' +
+    '<button data-act="leave">Leave to title</button></nav>';
+  ov.classList.remove('hidden');
+}
+
+function leaveToTitle() {
+  pumpToken++;
+  sess = null; S = null;
+  $('pause-overlay').classList.add('hidden');
+  $('results-overlay').classList.add('hidden');
+  showScreen('title');
+}
+
+// ---------- navigation ----------
+var navStack = [];
+var screenNow = 'title';
+var _showScreen = showScreen;
+showScreen = function (name) { screenNow = name; _showScreen(name); };
+
+function navTo(name) {
+  if (screenNow !== name) navStack.push(screenNow);
+  if (name === 'learn') renderLearn();
+  if (name === 'journey') renderJourney();
+  if (name === 'daily') renderDaily();
+  if (name === 'practice') renderPractice();
+  if (name === 'challenge') renderChallenge();
+  showScreen(name);
+}
+function navBack() { showScreen(navStack.pop() || 'title'); }
+
+// ---------- init: wire the existing DOM ----------
+$('btn-play').addEventListener('click', function () { navTo('modes'); });
+document.querySelectorAll('[data-nav]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var t = b.getAttribute('data-nav');
+    if (t === 'back') navBack(); else navTo(t);
+  });
+});
+document.querySelectorAll('[data-mode]').forEach(function (b) {
+  b.addEventListener('click', function () { navTo(b.getAttribute('data-mode')); });
+});
+$('learn-list').addEventListener('click', function (e) {
+  var i = [...e.currentTarget.children].indexOf(e.target.closest('li'));
+  if (i >= 0) startPlay('learn', i);
+});
+$('journey-list').addEventListener('click', function (e) {
+  var i = [...e.currentTarget.children].indexOf(e.target.closest('li'));
+  if (i >= 0) startPlay('journey', i);
+});
+$('daily-list').addEventListener('click', function (e) {
+  if (e.target.closest('li')) startPlay('daily', 0);
+});
+$('practice-list').addEventListener('click', function (e) {
+  var i = [...e.currentTarget.children].indexOf(e.target.closest('li'));
+  if (i >= 0) startPlay('practice', Content.PRACTICE[i].id);
+});
+$('challenge-list').addEventListener('click', function (e) {
+  var i = [...e.currentTarget.children].indexOf(e.target.closest('li'));
+  if (i >= 0) startPlay('challenge', Content.CHALLENGES[i].id);
+});
+$('hand').addEventListener('click', onHandClick);
+document.querySelectorAll('[data-act]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var a = b.getAttribute('data-act');
+    if (a === 'resume') { playSfx('ui-click'); $('pause-overlay').classList.add('hidden'); }
+    if (a === 'settings') { playSfx('ui-click'); $('pause-overlay').classList.add('hidden'); navTo('settings'); }
+    if (a === 'leave') { playSfx('ui-back'); leaveToTitle(); }
+    if (a === 'again') { playSfx('ui-click'); startPlay(S.mode, S.id); }
+  });
+});
+window.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && screenNow === 'play' && sess && sess.game && sess.game.phase !== 'done') {
+    playSfx('pause');
+    $('pause-overlay').classList.toggle('hidden');
+  }
+});
+window.addEventListener('resize', function () { drawTable(); });
+document.querySelectorAll('[data-q]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    settings.quality = b.getAttribute('data-q'); saveSettings();
+  });
+});
+var rmChk = $('set-reduced-motion');
+if (rmChk) { rmChk.checked = settings.reducedMotion; rmChk.addEventListener('change', function () { settings.reducedMotion = rmChk.checked; saveSettings(); }); }
+var ltChk = $('set-large-text');
+if (ltChk) { ltChk.checked = settings.largeText; ltChk.addEventListener('change', function () { settings.largeText = ltChk.checked; saveSettings(); document.body.classList.toggle('large-text', ltChk.checked); }); }
+if (settings.largeText) document.body.classList.add('large-text');
+var helpPanel = document.querySelector('.help-panel');
+if (helpPanel) helpPanel.innerHTML = HELP_TEXT.map(function (p) { return '<p>' + p + '</p>'; }).join('');
 function levelFor(mode,id){
   if (mode==='learn') return Content.tutorialLessons()[id];
   if (mode==='journey') return Content.JOURNEY[id];
