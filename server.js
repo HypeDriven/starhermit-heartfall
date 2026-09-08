@@ -1,9 +1,10 @@
 /* Heartfall — static file server. */
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = __dirname;
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8000;
 
 const MIME = {
@@ -17,9 +18,21 @@ const MIME = {
 };
 
 const server = http.createServer((req, res) => {
-  let urlPath = req.url || '/';
+  let urlPath = '/';
+  try {
+    urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+  } catch {
+    res.writeHead(400);
+    res.end('Bad request');
+    return;
+  }
   if (urlPath === '/') urlPath = '/index.html';
-  const filePath = path.join(ROOT, urlPath);
+  const filePath = path.join(ROOT, path.normalize(urlPath));
+  if ((!filePath.startsWith(ROOT + path.sep) && filePath !== ROOT) || path.relative(ROOT, filePath).split(path.sep).some(part => part.startsWith('.'))) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
   fs.readFile(filePath, (err, data) => {
     if (err) {
       res.writeHead(404);
@@ -36,4 +49,4 @@ server.listen(PORT, () => {
   console.log('Heartfall server listening on http://localhost:' + PORT);
 });
 
-module.exports = server;
+export default server;

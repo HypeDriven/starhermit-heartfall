@@ -54,3 +54,15 @@ label { display:block; margin-top:8px;} input[type=range]{ width:100%;}
 
 .toast { position:absolute; top:46vh; left:50%; transform:translate(-50%,-50%); background:#3a2f5e; color:#fff; padding:8px 18px;}
 .overlay { position:absolute; inset:0; background:rgba(8,12,24,.78);}
+
+#btn-pause { position:fixed; top:8px; right:10px; width:44px; height:44px; font-size:15px; background:#3a4f7d;}
+.card:focus, .card:focus-visible { outline:3px solid #ffffff; }
+button:focus, button:focus-visible, li:focus-visible { outline:2px solid #8fb4ff; }
+.goal-line { margin-top:10px; }
+.goal-line.done { color:#7fd8a0; }
+.goal-line.failed { color:#e08a8a; }
+.score-row.winner { color:#7fd8a0; font-weight:bold; }
+
+body.large-text { font-size:19px; }
+body.large-text .card { width:86px; height:114px; font-size:23px; }
+body.large-text button { font-size:17px; }

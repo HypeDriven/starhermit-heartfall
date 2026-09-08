@@ -1,0 +1,16 @@
+{
+  "name": "heartfall",
+  "version": "1.0.0",
+  "description": "Heartfall — trick-taking card game at a moonlit conservatory card table.",
+  "type": "module",
+  "scripts": {
+    "test": "node tests/rules-sanity.mjs && node tests/lesson-check.mjs",
+    "serve": "node server.js",
+    "test:e2e": "node tests/e2e.mjs"
+  },
+  "license": "SEE LICENSE IN LICENSE.md",
+  "private": true,
+  "devDependencies": {
+    "playwright-core": "^1.62.1"
+  }
+}

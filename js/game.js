@@ -27,6 +27,30 @@ function saveSettings() {
 }
 var settings = loadSettings();
 
+// ---------- progress (local, per mode) ----------
+function loadProgress() {
+  var p = { learn: {}, journey: {}, challenge: {}, daily: {} };
+  try {
+    var raw = localStorage.getItem('hf-progress-v1');
+    if (raw) {
+      var q = JSON.parse(raw);
+      ['learn', 'journey', 'challenge', 'daily'].forEach(function (k) {
+        if (q[k] && typeof q[k] === 'object') p[k] = q[k];
+      });
+    }
+  } catch (_) {}
+  return p;
+}
+function saveProgress() {
+  try { localStorage.setItem('hf-progress-v1', JSON.stringify(progress)); } catch (_) {}
+}
+var progress = loadProgress();
+function markDone(mode, id) {
+  if (!progress[mode] || progress[mode][id]) return;
+  progress[mode][id] = true;
+  saveProgress();
+}
+
 // ---------- audio (WebAudio): synthesized fallbacks + authored sample one-shots ----------
 // Named sound events. Every key has a synthesized fallback below and may be backed
 // by an authored clip at sfx/<name>.opus (see sfx/manifest.json).
@@ -40,10 +64,13 @@ var SFX_EVENTS = {
 
 var actx = null;
 var fxBus = null;          // effects bus: all SFX (samples and synth) route through here
+var musicBus = null;       // music bus: ambient pad routes through here
+var musicNodes = null;     // started once after the audio unlock
 var audioUnlocked = false; // set by the first user gesture
 var sampleCache = {};      // name -> { state: 'loading'|'ready'|'failed', buffer: AudioBuffer|null }
 
 function sfxGainValue() { return Math.max(0, Math.min(1, settings.sfx / 100)); }
+function musicGainValue() { return Math.max(0, Math.min(1, settings.music / 100)); }
 
 function ensureCtx() {
   if (!actx) {
@@ -53,8 +80,40 @@ function ensureCtx() {
     fxBus = actx.createGain();
     fxBus.gain.value = sfxGainValue();
     fxBus.connect(actx.destination);
+    musicBus = actx.createGain();
+    musicBus.gain.value = musicGainValue() * 0.5;
+    musicBus.connect(actx.destination);
   }
   return actx;
+}
+
+// Quiet generative pad: two slow detuned voices through a lowpass, gently
+// opened and closed by an LFO. Started once; volume follows the Music slider.
+function startMusic() {
+  var c = ensureCtx();
+  if (!c || !musicBus || musicNodes) return;
+  try {
+    var filter = c.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 520;
+    filter.Q.value = 0.4;
+    filter.connect(musicBus);
+    var voices = [];
+    [[110, 'sine', 0.20], [164.81, 'sine', 0.12], [220, 'triangle', 0.05]].forEach(function (v) {
+      var o = c.createOscillator(), g = c.createGain();
+      o.type = v[1]; o.frequency.value = v[0];
+      g.gain.value = v[2];
+      o.connect(g).connect(filter);
+      o.start();
+      voices.push(o);
+    });
+    var lfo = c.createOscillator(), lfoGain = c.createGain();
+    lfo.type = 'sine'; lfo.frequency.value = 0.07;
+    lfoGain.gain.value = 140;
+    lfo.connect(lfoGain).connect(filter.frequency);
+    lfo.start();
+    musicNodes = { voices: voices, lfo: lfo };
+  } catch (_) {}
 }
 
 function unlockAudio() {
@@ -62,11 +121,17 @@ function unlockAudio() {
   if (!c) return;
   if (c.state === 'suspended') { try { c.resume(); } catch (_) {} }
   audioUnlocked = true;
+  startMusic();
 }
 
 function setSfxVolume(v) {
   settings.sfx = v;
   if (fxBus) fxBus.gain.value = sfxGainValue();
+}
+
+function setMusicVolume(v) {
+  settings.music = v;
+  if (musicBus) musicBus.gain.value = musicGainValue() * 0.5;
 }
 
 function beep(freq, dur, gain, type, delay) {
@@ -171,33 +236,49 @@ function showScreen(name) {
 }
 
 // ---------- list rendering ----------
+function liRow(ul, label, done) {
+  var li = document.createElement('li');
+  var name = document.createElement('span');
+  name.textContent = label;
+  var st = document.createElement('span');
+  st.className = 'done';
+  st.textContent = done ? '\u2713' : '';
+  li.appendChild(name);
+  li.appendChild(st);
+  ul.appendChild(li);
+  return li;
+}
 function renderLearn() {
-  var ul = $('learn-list'); ul.innerHTML='';
-  Content.tutorialLessons().forEach(function (l) {
-    var li = document.createElement('li'); li.textContent=l.title; ul.appendChild(li);
+  var ul = $('learn-list'); ul.innerHTML = '';
+  Content.tutorialLessons().forEach(function (l, i) {
+    liRow(ul, (i + 1) + '. ' + l.title, progress.learn[l.id]);
   });
 }
-function stageStatus(level, doneIds) {
-  if (!doneIds || !doneIds[level.id]) return '—';
-  return level.mastery ? 'MASTERY' : (level.goal.type === 'score-under' ? 'SCORE UNDER' : '');
-}
 function renderJourney() {
-  var ul = $('journey-list'); ul.innerHTML='';
-  Content.JOURNEY.forEach(function (lv) {
-    var li=document.createElement('li'); li.textContent=lv.name; ul.appendChild(li);
+  var ul = $('journey-list'); ul.innerHTML = '';
+  Content.JOURNEY.forEach(function (lv, i) {
+    liRow(ul, (i + 1) + '. ' + lv.name, progress.journey[lv.id]);
   });
 }
 function renderDaily() {
-  var ul=$('daily-list'); ul.innerHTML='';
-  for (var i=0;i<7;i++){ void Content.dailyConfig(Content.utcDateString(Date.now())); var li=document.createElement('li'); li.textContent='Daily'; ul.appendChild(li);}
+  var ul = $('daily-list'); ul.innerHTML = '';
+  var now = Date.now();
+  for (var i = 0; i < 7; i++) {
+    var date = Content.utcDateString(now - i * 86400000);
+    var cfg = Content.dailyConfig(date);
+    var li = liRow(ul,
+      (i === 0 ? 'Today' : date) + ' \u00b7 ' + cfg.players + ' seats \u00b7 ' + cfg.threshold + ' pts',
+      progress.daily[date]);
+    li.dataset.date = date;
+  }
 }
 function renderPractice() {
-  var ul=$('practice-list'); ul.innerHTML='';
-  Content.PRACTICE.forEach(function (p){ var li=document.createElement('li'); li.textContent=p.name; ul.appendChild(li);});
+  var ul = $('practice-list'); ul.innerHTML = '';
+  Content.PRACTICE.forEach(function (p) { liRow(ul, p.name, false); });
 }
 function renderChallenge() {
-  var ul=$('challenge-list'); ul.innerHTML='';
-  Content.CHALLENGES.forEach(function (c){ var li=document.createElement('li'); li.textContent=c.name; ul.appendChild(li);});
+  var ul = $('challenge-list'); ul.innerHTML = '';
+  Content.CHALLENGES.forEach(function (c) { liRow(ul, c.name, progress.challenge[c.id]); });
 }
 
 // ---------- help text ----------
@@ -206,12 +287,14 @@ var HELP_TEXT = [
   '',
   'Lowest match score wins once anyone reaches the threshold; full-penalty capture applies the declared room rule.',
   '',
+  'Controls: click or tap a card to select or play it. In Practice and Learn, H asks for a hint and U undoes your last action. Escape or the pause button opens the pause menu.',
+  '',
   'Results show a component breakdown rather than one unexplained total. Ties use, in order: primary objective completion, fewer invalid actions, lower authoritative elapsed time, then stable session identifier.'
 ];
 
 // ---------- play / session state (populated by startPlay) ----------
 var S = null; // { mode, id, level }
-var sess = null; // { game, passSel:[], hintCard:null, undoStack:[] , resultsShown:false }
+var sess = null; // { game, passSel:[], hintCard:null, undoStack:[], resultsShown, lessonDone }
 
 function seatLabel(seat){ return Content.seatName(seat); }
 function cardLabel(id){ return Rules.cardName(id); }
@@ -220,24 +303,102 @@ function isPenaltyCard(id){ return Rules.isPenalty(id); }
 // ---------- 3D scene (render.js provides; stub here if unavailable) ----------
 var Render = window.HFRender || null;
 
+function levelFor(mode, id) {
+  if (mode === 'learn') return Content.tutorialLessons()[id];
+  if (mode === 'journey') return Content.JOURNEY[id];
+  if (mode === 'daily') return Content.dailyConfig(id);
+  if (mode === 'practice') return Content.PRACTICE.find(function (p) { return p.id === id; });
+  if (mode === 'challenge') return Content.CHALLENGES.find(function (c) { return c.id === id; });
+  throw new Error('unknown mode ' + mode);
+}
+
 function startPlay(mode, id) {
-  var level=levelFor(mode,id);
+  var level = levelFor(mode, id);
   var cfg = level.cfg || level;
   if (cfg.seed === undefined) {
     cfg = Object.assign({}, cfg, { seed: window.HFRNG.hashString('heartfall-' + mode + '-' + (cfg.id || id)) });
   }
-  S={mode:mode,id:id,level:level};
-  sess={game:Rules.createGame(cfg),passSel:[],hintCard:null,undoStack:[],resultsShown:false};
+  S = { mode: mode, id: id, level: level };
+  sess = { game: Rules.createGame(cfg), passSel: [], hintCard: null, undoStack: [], resultsShown: false, lessonDone: false };
+  if (mode === 'learn' && level.fixture) {
+    level.fixture(sess.game); // deterministic fixture overwrites the dealt state
+    sess.game.events = [];
+  }
   pumpToken++;
   $('hud-top').classList.remove('hidden');
   $('hud-bottom').classList.remove('hidden');
   $('results-overlay').classList.add('hidden');
   $('pause-overlay').classList.add('hidden');
-  $('obj-title').textContent = level.name || 'Heartfall';
+  $('obj-title').textContent = level.name || level.title || 'Heartfall';
   showScreen('play');
   playSfx('cards-deal');
   syncUI();
   aiPump();
+}
+
+// ---------- assists (hint / undo): practice and learn only ----------
+function assistsOn() { return S && (S.mode === 'practice' || S.mode === 'learn'); }
+
+function doHint() {
+  if (!sess || !sess.game || !assistsOn()) return;
+  var h = Rules.hint(sess.game, 0);
+  if (!h) return;
+  sess.hintCard = h.kind === 'play' ? h.card : null;
+  if (h.kind === 'pass') sess.passSel = h.cards.slice();
+  playSfx('hint');
+  toast(h.why || 'Try this.');
+  syncUI();
+}
+
+function doUndo() {
+  if (!sess || !sess.game || !assistsOn()) return;
+  var prev = sess.undoStack.pop();
+  if (!prev) { playSfx('invalid'); toast('Nothing to undo.'); return; }
+  sess.game = Rules.deserialize(prev);
+  sess.passSel = []; sess.hintCard = null;
+  playSfx('undo');
+  checkLessonComplete('undo', []);
+  syncUI();
+}
+
+// ---------- tutorial lesson completion ----------
+function lessonGoalKind() {
+  return (S && S.mode === 'learn' && S.level.goal) ? S.level.goal.kind : null;
+}
+
+function checkLessonComplete(kind, events) {
+  var goal = lessonGoalKind();
+  if (!goal || !sess || sess.lessonDone) return;
+  var done = false;
+  if (goal === 'play' && kind === 'play') done = true;
+  else if (goal === 'pass' && kind === 'pass') done = true;
+  else if (goal === 'undo' && kind === 'undo') done = true;
+  else if (goal === 'queen-dump' && kind === 'play') {
+    done = events.some(function (e) { return e.type === 'queen' && e.p === 0; });
+  } else if (goal === 'duck' && kind === 'play') {
+    var trick = events.filter(function (e) { return e.type === 'trick'; })[0];
+    if (trick) {
+      if (trick.winner !== 0) done = true;
+      else toast('You took the trick — try to stay out of it.');
+    }
+  } else if (goal === 'eclipse') {
+    done = events.some(function (e) { return e.type === 'eclipse' && e.p === 0; });
+  }
+  if (done) lessonComplete();
+}
+
+function lessonComplete() {
+  sess.lessonDone = true;
+  markDone('learn', S.level.id);
+  playSfx('match-win');
+  var lessons = Content.tutorialLessons();
+  var hasNext = S.id + 1 < lessons.length;
+  var ov = $('results-overlay');
+  ov.innerHTML = '<h2>Lesson complete.</h2><div class="panel"><p>' + S.level.title + ' — done.</p></div>' +
+    '<nav class="menu">' +
+    (hasNext ? '<button data-act="next-lesson" class="primary big">Next lesson</button>' : '') +
+    '<button data-act="exit-learn"' + (hasNext ? '' : ' class="primary big"') + '>Back to lessons</button></nav>';
+  ov.classList.remove('hidden');
 }
 
 // ---------- play-screen rendering & turn loop ----------
@@ -281,6 +442,8 @@ function renderHand() {
     li.textContent = cardLabel(c);
     li.dataset.card = c;
     li.className = 'card';
+    li.tabIndex = 0;
+    li.setAttribute('role', 'button');
     if (isPenaltyCard(c)) li.classList.add('penalty');
     if (sess.passSel.indexOf(c) >= 0) li.classList.add('sel');
     if (sess.hintCard === c) li.classList.add('hint');
@@ -303,32 +466,18 @@ function renderActions() {
       if (sess.passSel.length !== g.cfg.passCount) { playSfx('invalid'); toast('Select ' + g.cfg.passCount + ' cards to pass.'); return; }
       var reason = Rules.checkPass(g, 0, sess.passSel);
       if (reason) { playSfx('invalid'); toast(reason); return; }
-      sess.undoStack.push(Rules.serialize(g));
+      if (assistsOn()) sess.undoStack.push(Rules.serialize(g));
       var r = Rules.applyCommand(g, { type: 'pass', p: 0, cards: sess.passSel.slice() });
       if (!r.ok) { playSfx('invalid'); toast(r.reason || 'Cannot pass those.'); return; }
       sess.game = r.state; sess.passSel = []; sess.hintCard = null;
       playSfx('card-pass');
+      checkLessonComplete('pass', r.events);
       syncUI(); aiPump();
     });
   }
-  if (S.mode === 'practice' || S.mode === 'learn') {
-    btn('Hint', '', function () {
-      var h = Rules.hint(sess.game, 0);
-      if (!h) return;
-      sess.hintCard = h.kind === 'play' ? h.card : null;
-      if (h.kind === 'pass') sess.passSel = h.cards.slice();
-      playSfx('hint');
-      toast(h.why || 'Try this.');
-      syncUI();
-    });
-    btn('Undo', '', function () {
-      var prev = sess.undoStack.pop();
-      if (!prev) { playSfx('invalid'); toast('Nothing to undo.'); return; }
-      sess.game = Rules.deserialize(prev);
-      sess.passSel = []; sess.hintCard = null;
-      playSfx('undo');
-      syncUI();
-    });
+  if (assistsOn()) {
+    btn('Hint', '', doHint);
+    btn('Undo', '', doUndo);
   }
 }
 
@@ -392,10 +541,18 @@ function syncUI() {
   }
 }
 
+// Solo simulation pauses with the pause overlay, with navigation away from the
+// play screen, and while the tab is hidden.
+function simPaused() {
+  return !$('pause-overlay').classList.contains('hidden') ||
+    screenNow !== 'play' || document.hidden;
+}
+
 function aiPump() {
   var token = pumpToken;
   function step() {
-    if (token !== pumpToken || !sess || !sess.game || sess.game.phase === 'done') return;
+    if (token !== pumpToken || !sess || !sess.game || sess.game.phase === 'done' || sess.lessonDone) return;
+    if (simPaused()) { setTimeout(step, 300); return; }
     var g = sess.game;
     if (g.phase === 'pass' && g.passes[0] === null && g.actor === 0) return; // waiting for human pass
     if (g.phase === 'play' && g.actor === 0) { syncUI(); return; }          // waiting for human play
@@ -406,10 +563,13 @@ function aiPump() {
     sess.game = r.state;
     r.events.forEach(function (e) {
       if (e.type === 'trick') playSfx(e.winner === 0 ? 'trick-take' : 'card-play');
+      if (e.type === 'queen') playSfx('queen-taken');
+      if (e.type === 'hearts-broken') playSfx('heart-taken');
       if (e.type === 'eclipse') playSfx('eclipse');
       if (e.type === 'round-end') playSfx('round-end');
     });
     syncUI();
+    if (sess.game.phase === 'play' && sess.game.actor === 0) playSfx('turn-prompt');
     setTimeout(step, 450);
   }
   setTimeout(step, 450);
@@ -417,7 +577,7 @@ function aiPump() {
 
 function onHandClick(e) {
   var li = e.target && e.target.closest ? e.target.closest('li') : null;
-  if (!li || !sess || !sess.game) return;
+  if (!li || !sess || !sess.game || sess.lessonDone || simPaused()) return;
   var card = Number(li.dataset.card);
   var g = sess.game;
   if (g.phase === 'pass' && !g.passes[0]) {
@@ -433,13 +593,29 @@ function onHandClick(e) {
   if (g.phase === 'play' && g.actor === 0) {
     var reason = Rules.checkPlay(g, 0, card);
     if (reason) { playSfx('invalid'); toast(reason); return; }
-    sess.undoStack.push(Rules.serialize(g));
+    if (assistsOn()) sess.undoStack.push(Rules.serialize(g));
     var r = Rules.applyCommand(g, { type: 'play', p: 0, card: card });
     if (!r.ok) { playSfx('invalid'); toast(r.reason || 'Cannot play that.'); return; }
     sess.game = r.state; sess.hintCard = null;
     playSfx('card-play');
+    checkLessonComplete('play', r.events);
     syncUI(); aiPump();
   }
+}
+
+// Did seat 0 satisfy the level goal, given a finished match?
+function goalMet(level, g) {
+  if (!level.goal) return true;
+  if (g.terminal.winners.indexOf(0) < 0) return false;
+  switch (level.goal.type) {
+    case 'win': return true;
+    case 'score-under': return g.matchScores[0] <= level.goal.value - 1;
+    case 'avoid-queen': return g.stats.queensTaken[0] === 0;
+    case 'eclipse': return g.stats.eclipses[0] > 0;
+    case 'no-hearts-round':
+      return g.roundSummaries.some(function (r) { return r.hearts && r.hearts[0] === 0; });
+  }
+  return false;
 }
 
 function showResults() {
@@ -450,7 +626,15 @@ function showResults() {
   }).join('');
   var head = t.winners.indexOf(0) >= 0 ? 'You win the table.' : seatLabel(t.winner) + ' takes the table.';
   playSfx(t.winners.indexOf(0) >= 0 ? 'match-win' : 'match-lose');
-  ov.innerHTML = '<h2>' + head + '</h2><div class="panel">' + rows + '</div>' +
+  var goalLine = '';
+  if (S.mode === 'journey' || S.mode === 'challenge') {
+    var met = goalMet(S.level, g);
+    if (met) markDone(S.mode, S.level.id);
+    goalLine = '<p class="goal-line ' + (met ? 'done' : 'failed') + '">' +
+      Content.goalText(S.level.goal) + (met ? ' — achieved' : ' — not met') + '</p>';
+  }
+  if (S.mode === 'daily') markDone('daily', S.level.date || S.id);
+  ov.innerHTML = '<h2>' + head + '</h2><div class="panel">' + rows + goalLine + '</div>' +
     '<nav class="menu"><button data-act="again" class="primary big">Play again</button>' +
     '<button data-act="leave">Leave to title</button></nav>';
   ov.classList.remove('hidden');
@@ -468,7 +652,11 @@ function leaveToTitle() {
 var navStack = [];
 var screenNow = 'title';
 var _showScreen = showScreen;
-showScreen = function (name) { screenNow = name; _showScreen(name); };
+showScreen = function (name) {
+  screenNow = name;
+  if (name !== 'play') $('toast').classList.add('hidden'); // no stale toasts over menus
+  _showScreen(name);
+};
 
 function navTo(name) {
   if (screenNow !== name) navStack.push(screenNow);
@@ -501,7 +689,8 @@ $('journey-list').addEventListener('click', function (e) {
   if (i >= 0) startPlay('journey', i);
 });
 $('daily-list').addEventListener('click', function (e) {
-  if (e.target.closest('li')) startPlay('daily', 0);
+  var li = e.target.closest ? e.target.closest('li') : null;
+  if (li && li.dataset.date) startPlay('daily', li.dataset.date);
 });
 $('practice-list').addEventListener('click', function (e) {
   var i = [...e.currentTarget.children].indexOf(e.target.closest('li'));
@@ -512,20 +701,42 @@ $('challenge-list').addEventListener('click', function (e) {
   if (i >= 0) startPlay('challenge', Content.CHALLENGES[i].id);
 });
 $('hand').addEventListener('click', onHandClick);
-document.querySelectorAll('[data-act]').forEach(function (b) {
-  b.addEventListener('click', function () {
-    var a = b.getAttribute('data-act');
-    if (a === 'resume') { playSfx('ui-click'); $('pause-overlay').classList.add('hidden'); }
-    if (a === 'settings') { playSfx('ui-click'); $('pause-overlay').classList.add('hidden'); navTo('settings'); }
-    if (a === 'leave') { playSfx('ui-back'); leaveToTitle(); }
-    if (a === 'again') { playSfx('ui-click'); startPlay(S.mode, S.id); }
-  });
+$('hand').addEventListener('keydown', function (e) {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  var li = e.target && e.target.closest ? e.target.closest('li') : null;
+  if (!li) return;
+  e.preventDefault();
+  onHandClick({ target: li });
+});
+// data-act buttons are created both statically (pause overlay, HUD) and
+// dynamically (results / lesson overlays), so dispatch by delegation.
+document.addEventListener('click', function (e) {
+  var b = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+  if (!b) return;
+  var a = b.getAttribute('data-act');
+  if (a === 'pause') {
+    if (screenNow === 'play' && sess && sess.game && sess.game.phase !== 'done') {
+      playSfx('pause');
+      $('pause-overlay').classList.remove('hidden');
+    }
+  }
+  if (a === 'resume') { playSfx('ui-click'); $('pause-overlay').classList.add('hidden'); }
+  if (a === 'settings') { playSfx('ui-click'); $('pause-overlay').classList.add('hidden'); navTo('settings'); }
+  if (a === 'leave') { playSfx('ui-back'); leaveToTitle(); }
+  if (a === 'again') { if (S) { playSfx('ui-click'); startPlay(S.mode, S.id); } }
+  if (a === 'next-lesson') { if (S) { playSfx('ui-click'); startPlay('learn', S.id + 1); } }
+  if (a === 'exit-learn') { playSfx('ui-back'); leaveToTitle(); navTo('learn'); }
 });
 window.addEventListener('keydown', function (e) {
   if (e.key === 'Escape' && screenNow === 'play' && sess && sess.game && sess.game.phase !== 'done') {
     playSfx('pause');
     $('pause-overlay').classList.toggle('hidden');
+    return;
   }
+  if (screenNow !== 'play' || !sess || !sess.game || sess.game.phase === 'done' || sess.lessonDone) return;
+  if (!$('pause-overlay').classList.contains('hidden')) return;
+  if (e.key === 'u' || e.key === 'U') doUndo();
+  if (e.key === 'h' || e.key === 'H') doHint();
 });
 window.addEventListener('resize', function () { drawTable(); });
 document.querySelectorAll('[data-q]').forEach(function (b) {
@@ -540,17 +751,6 @@ if (ltChk) { ltChk.checked = settings.largeText; ltChk.addEventListener('change'
 if (settings.largeText) document.body.classList.add('large-text');
 var helpPanel = document.querySelector('.help-panel');
 if (helpPanel) helpPanel.innerHTML = HELP_TEXT.map(function (p) { return '<p>' + p + '</p>'; }).join('');
-function levelFor(mode,id){
-  if (mode==='learn') return Content.tutorialLessons()[id];
-  if (mode==='journey') return Content.JOURNEY[id];
-  if (mode==='daily') return Content.dailyConfig(Content.utcDateString(Date.now()));
-  if (mode==='practice') return Content.PRACTICE.find(function(p){return p.id===id;});
-  if (mode==='challenge') return Content.CHALLENGES.find(function(c){return c.id===id;});
-  throw new Error('unknown mode '+mode);
-}
-
-// ---------- actions / HUD are wired in init() below ----------
-function nav(target){ showScreen(target); }
 
 // ---------- audio wiring for the existing UI ----------
 // Gesture unlock: browsers require a user gesture before AudioContext output.
@@ -574,7 +774,7 @@ if (handEl) {
   });
 }
 
-// Settings sliders drive the live settings and the effects bus volume.
+// Settings sliders drive the live settings and the audio bus volumes.
 var sfxSlider = $('set-sfx');
 if (sfxSlider) {
   sfxSlider.value = settings.sfx;
@@ -586,7 +786,7 @@ var musicSlider = $('set-music');
 if (musicSlider) {
   musicSlider.value = settings.music;
   musicSlider.addEventListener('input', function () {
-    settings.music = Number(musicSlider.value); saveSettings();
+    setMusicVolume(Number(musicSlider.value)); saveSettings();
   });
 }
 
@@ -596,6 +796,7 @@ window.HFGame = {
     play: playSfx,
     unlock: unlockAudio,
     setSfxVolume: setSfxVolume,
+    setMusicVolume: setMusicVolume,
     events: Object.keys(SFX_EVENTS)
   }
 };

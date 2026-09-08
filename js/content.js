@@ -8,7 +8,7 @@
   var api = factory(RNG);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.HFContent = api;
-})(typeof self !== 'undefined' ? self : this, function (RNG) {
+})(typeof self !== 'undefined' ? self : (typeof globalThis !== 'undefined' ? globalThis : this), function (RNG) {
   'use strict';
 
   var CONTENT_VERSION = 1;
@@ -251,11 +251,12 @@
         goal: { kind: 'play' },
         fixture: function (st) {
           st.phase = 'play'; st.firstTrick = false; st.heartsBroken = false;
-          st.trick = [{ p: 1, card: D + 9 }]; // J♦ led
+          // Seats 1-3 have already played diamonds; you answer last.
+          st.trick = [{ p: 1, card: D + 9 }, { p: 2, card: D + 2 }, { p: 3, card: D + 8 }]; // J♦, 3♦, 10♦
           st.leader = 1; st.actor = 0;
           st.hands[0] = [D + 5, C + 2, H + 4];           // 7♦, 4♣, 6♥
-          st.hands[1] = [D + 2, S + 3, C + 5];
-          st.hands[2] = [D + 8, S + 6, H + 9];
+          st.hands[1] = [S + 3, C + 5];
+          st.hands[2] = [S + 6, H + 9];
           st.hands[3] = [S + 1, C + 7, H + 11];
         },
         cfg: { id: 't1', seed: 9001 } },
@@ -271,7 +272,7 @@
           st.phase = 'play'; st.firstTrick = false; st.heartsBroken = true;
           st.trick = [{ p: 1, card: D + 10 }, { p: 2, card: H + 6 }]; // Q♦, 8♥
           st.leader = 1; st.actor = 0;
-          st.hands[0] = [D + 11, S + 0];                 // K♦, 2♠
+          st.hands[0] = [C + 2, S + 0];                 // 3♣, 2♠ — no diamonds, so you may duck
           st.hands[1] = [C + 1];
           st.hands[2] = [C + 3];
           st.taken = [[], [], []];
@@ -297,7 +298,7 @@
           st.phase = 'play'; st.firstTrick = false; st.heartsBroken = true;
           st.trick = [{ p: 1, card: D + 1 }, { p: 2, card: H + 0 }, { p: 3, card: D + 3 }]; // 3♦, 2♥, 5♦
           st.leader = 1; st.actor = 0;
-          st.hands = [[D + 12], [C + 0], [C + 1], [C + 2]];   // A♦ last
+          st.hands = [[D + 12], [], [], []];   // your A♦ is the last card at the table
           var eaten = [S + 10]; // Q♠
           for (var h = 1; h < 13; h++) eaten.push(H + h);     // 3♥..A♥
           st.taken = [eaten, [S + 1], [S + 2], [S + 3]];

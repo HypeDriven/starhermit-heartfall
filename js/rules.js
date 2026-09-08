@@ -13,7 +13,7 @@
   var api = factory(RNG);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.HFRules = api;
-})(typeof self !== 'undefined' ? self : this, function (RNG) {
+})(typeof self !== 'undefined' ? self : (typeof globalThis !== 'undefined' ? globalThis : this), function (RNG) {
   'use strict';
 
   var STATE_VERSION = 1;
@@ -388,8 +388,10 @@
   function endRound(s, rng) {
     var n = s.players;
     var raw = [];
+    var hearts = [];
     for (var p = 0; p < n; p++) {
       raw.push(s.taken[p].reduce(function (a, c) { return a + penaltyOf(c); }, 0));
+      hearts.push(s.taken[p].reduce(function (a, c) { return a + (cardSuit(c) === 1 ? 1 : 0); }, 0));
     }
     var eclipseBy = -1;
     for (p = 0; p < n; p++) if (raw[p] === ECLIPSE_POINTS) eclipseBy = p;
@@ -405,7 +407,7 @@
     }
     for (p = 0; p < n; p++) s.matchScores[p] += final[p];
     s.roundSummaries.push({
-      round: s.round, rawPoints: raw, points: final,
+      round: s.round, rawPoints: raw, points: final, hearts: hearts,
       eclipseBy: eclipseBy >= 0 ? eclipseBy : null, scores: s.matchScores.slice()
     });
     s.events.push({
