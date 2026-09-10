@@ -1,6 +1,9 @@
 # SFX manifest — heartfall
 
-Generated with MOSS-SoundEffect v2.0, 48 kHz mono Opus (96 kbps VBR, loudness-normalized; 100 inference steps).
+Generation table for the MOSS-SoundEffect batch tool. The canonical, code-bound manifest is
+`sfx/manifest.txt` (file | event id | description | usage context); this file records the
+prompt behind each clip. 48 kHz mono Opus (96 kbps VBR, loudness-normalised to -20 LUFS),
+MOSS-SoundEffect v2.0 at 100 inference steps.
 
 | file | event | prompt |
 |---|---|---|
@@ -22,3 +25,5 @@ Generated with MOSS-SoundEffect v2.0, 48 kHz mono Opus (96 kbps VBR, loudness-no
 | round-end.opus | round-end | A neat stack of cards squared up and tapped twice on the table, tidy paper taps with a settling shuffle. |
 | match-win.opus | match-win | A celebratory cascade of cards riffled and sprung between two hands, bright fluttering paper crescendo. |
 | match-lose.opus | match-lose | Cards slowly gathered and stacked in near silence, slow deliberate paper slides ending in a single soft thud. |
+| hearts-broken.opus | hearts-broken | A thin pane of conservatory glass cracking softly, delicate crystalline splinter followed by a low resonant hum. |
+| lesson-complete.opus | lesson-complete | A small glass wind chime struck once and left to settle, three bright bell tones with a warm gentle decay. |

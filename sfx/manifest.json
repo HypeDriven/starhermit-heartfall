@@ -106,5 +106,17 @@
     "seconds": 3,
     "prompt": "Cards slowly gathered and stacked in near silence, slow deliberate paper slides ending in a single soft thud.",
     "event": "match-lose"
+  },
+  {
+    "name": "hearts-broken",
+    "seconds": 2,
+    "prompt": "A thin pane of conservatory glass cracking softly, delicate crystalline splinter followed by a low resonant hum.",
+    "event": "hearts-broken"
+  },
+  {
+    "name": "lesson-complete",
+    "seconds": 2,
+    "prompt": "A small glass wind chime struck once and left to settle, three bright bell tones with a warm gentle decay.",
+    "event": "lesson-complete"
   }
 ]

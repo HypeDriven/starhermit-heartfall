@@ -58,8 +58,8 @@ var SFX_EVENTS = {
   'ui-click': 1, 'ui-back': 1, 'pause': 1,
   'card-select': 1, 'card-play': 1, 'card-pass': 1, 'cards-deal': 1,
   'invalid': 1, 'turn-prompt': 1, 'hint': 1, 'undo': 1,
-  'trick-take': 1, 'heart-taken': 1, 'queen-taken': 1,
-  'eclipse': 1, 'round-end': 1, 'match-win': 1, 'match-lose': 1
+  'trick-take': 1, 'heart-taken': 1, 'queen-taken': 1, 'hearts-broken': 1,
+  'eclipse': 1, 'round-end': 1, 'lesson-complete': 1, 'match-win': 1, 'match-lose': 1
 };
 
 var actx = null;
@@ -181,8 +181,10 @@ function synthEvent(name) {
     case 'trick-take': noiseBurst(0.14, 0.22, 1400); beep(330, 0.12, 0.13, 'triangle', 0.12); beep(262, 0.14, 0.12, 'triangle', 0.22); break;
     case 'heart-taken': beep(196, 0.20, 0.16, 'sine'); beep(147, 0.24, 0.12, 'sine', 0.10); break;
     case 'queen-taken': beep(110, 0.35, 0.18, 'sine'); beep(82, 0.45, 0.14, 'sine', 0.18); break;
+    case 'hearts-broken': noiseBurst(0.05, 0.16, 5200); beep(1320, 0.09, 0.11, 'sine', 0.02); beep(220, 0.30, 0.10, 'sine', 0.08); break;
     case 'eclipse':    beep(392, 0.14, 0.14, 'triangle'); beep(494, 0.14, 0.14, 'triangle', 0.12); beep(587, 0.14, 0.14, 'triangle', 0.24); beep(784, 0.30, 0.16, 'triangle', 0.36); break;
     case 'round-end':  beep(523, 0.12, 0.14, 'triangle'); beep(659, 0.12, 0.13, 'triangle', 0.12); beep(784, 0.22, 0.14, 'triangle', 0.24); break;
+    case 'lesson-complete': beep(784, 0.16, 0.13, 'sine'); beep(988, 0.16, 0.12, 'sine', 0.14); beep(1319, 0.34, 0.12, 'sine', 0.28); break;
     case 'match-win':  beep(523, 0.14, 0.15, 'triangle'); beep(659, 0.14, 0.15, 'triangle', 0.13); beep(784, 0.14, 0.15, 'triangle', 0.26); beep(1047, 0.34, 0.16, 'triangle', 0.39); break;
     case 'match-lose': beep(392, 0.18, 0.14, 'sine'); beep(311, 0.20, 0.13, 'sine', 0.16); beep(233, 0.34, 0.13, 'sine', 0.34); break;
   }
@@ -224,6 +226,20 @@ function playSfx(name) {
     fetchSample(name);
   }
   synthEvent(name);
+}
+
+// Map rules events onto audio cues. Used for both human and AI resolutions so
+// the same table moment always sounds the same, whoever caused it.
+function playEventSfx(events, selfSeat) {
+  if (!events) return;
+  events.forEach(function (e) {
+    if (e.type === 'play' && e.p !== selfSeat) playSfx('card-play');
+    else if (e.type === 'trick') playSfx(e.winner === selfSeat ? 'trick-take' : 'card-play');
+    else if (e.type === 'queen') playSfx('queen-taken');
+    else if (e.type === 'hearts-broken') playSfx('hearts-broken');
+    else if (e.type === 'eclipse') playSfx('eclipse');
+    else if (e.type === 'round-end') playSfx('round-end');
+  });
 }
 
 // ---------- DOM helpers ----------
@@ -390,7 +406,7 @@ function checkLessonComplete(kind, events) {
 function lessonComplete() {
   sess.lessonDone = true;
   markDone('learn', S.level.id);
-  playSfx('match-win');
+  playSfx('lesson-complete');
   var lessons = Content.tutorialLessons();
   var hasNext = S.id + 1 < lessons.length;
   var ov = $('results-overlay');
@@ -492,6 +508,17 @@ function seatPos(i, n, w, h) {
   return [s[0] * w, s[1] * h];
 }
 
+// Painted table plate (assets/table.webp). Purely decorative: if it fails to
+// load or has not decoded yet, drawTable falls back to the flat felt ellipse.
+var tableArt = null;
+(function loadTableArt() {
+  if (typeof Image !== 'function') return;
+  var img = new Image();
+  img.addEventListener('load', function () { tableArt = img; drawTable(); });
+  img.addEventListener('error', function () { tableArt = null; });
+  img.src = 'assets/table.webp';
+})();
+
 function drawTable() {
   var cv = $('game-canvas');
   if (!cv || !sess) return;
@@ -502,16 +529,27 @@ function drawTable() {
   var w = cv.width, h = cv.height;
   ctx.fillStyle = '#17251d';
   ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = '#1f3328';
-  ctx.beginPath(); ctx.ellipse(w / 2, h / 2, w * 0.38, h * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+  if (tableArt && tableArt.width) {
+    var side = Math.max(w, h) * 1.06;   // cover: no letterbox at any aspect
+    ctx.drawImage(tableArt, (w - side) / 2, (h - side) / 2, side, side);
+    ctx.fillStyle = 'rgba(9,14,26,0.38)';  // scrim: keeps HUD text above 4.5:1
+    ctx.fillRect(0, 0, w, h);
+  } else {
+    ctx.fillStyle = '#1f3328';
+    ctx.beginPath(); ctx.ellipse(w / 2, h / 2, w * 0.38, h * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+  }
   if (!sess.game) return;
   var g = sess.game;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = '15px system-ui, sans-serif';
   for (var p = 0; p < g.players; p++) {
     var pos = seatPos(p, g.players, w, h);
     ctx.fillStyle = (g.phase === 'play' && g.actor === p) ? '#f7c948' : '#cfd8d2';
-    ctx.font = '15px system-ui, sans-serif';
-    ctx.fillText(seatLabel(p) + ' (' + g.hands[p].length + ')', pos[0], pos[1] - 24);
+    var label = seatLabel(p) + ' (' + g.hands[p].length + ')';
+    // Keep side seats fully on screen at narrow widths.
+    var half = ctx.measureText(label).width / 2 + 6;
+    var lx = Math.max(half, Math.min(w - half, pos[0]));
+    ctx.fillText(label, lx, pos[1] - 24);
   }
   // current trick around the centre
   ctx.font = '26px system-ui, sans-serif';
@@ -524,8 +562,12 @@ function drawTable() {
     ctx.fillText(cardLabel(e.card), cx, cy);
   });
   ctx.font = '13px system-ui, sans-serif';
-  ctx.fillStyle = '#9db3a6';
-  ctx.fillText('Round ' + g.round + (g.heartsBroken ? ' · hearts broken' : ''), w / 2, h - 14);
+  ctx.fillStyle = '#cfe0ff';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';   // top-left: clear of the centred HUD and hand at every size
+  ctx.fillText('Round ' + g.round + (g.heartsBroken ? ' · hearts broken' : ''), 12, 12);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
 }
 
 function syncUI() {
@@ -561,13 +603,7 @@ function aiPump() {
     var r = Rules.applyCommand(g, cmd);
     if (!r.ok) return;
     sess.game = r.state;
-    r.events.forEach(function (e) {
-      if (e.type === 'trick') playSfx(e.winner === 0 ? 'trick-take' : 'card-play');
-      if (e.type === 'queen') playSfx('queen-taken');
-      if (e.type === 'hearts-broken') playSfx('heart-taken');
-      if (e.type === 'eclipse') playSfx('eclipse');
-      if (e.type === 'round-end') playSfx('round-end');
-    });
+    playEventSfx(r.events, 0);
     syncUI();
     if (sess.game.phase === 'play' && sess.game.actor === 0) playSfx('turn-prompt');
     setTimeout(step, 450);
@@ -598,6 +634,7 @@ function onHandClick(e) {
     if (!r.ok) { playSfx('invalid'); toast(r.reason || 'Cannot play that.'); return; }
     sess.game = r.state; sess.hintCard = null;
     playSfx('card-play');
+    playEventSfx(r.events, 0);
     checkLessonComplete('play', r.events);
     syncUI(); aiPump();
   }

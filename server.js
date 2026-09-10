@@ -14,7 +14,8 @@ const MIME = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
-  '.opus': 'audio/ogg'
+  '.opus': 'audio/ogg',
+  '.webp': 'image/webp'
 };
 
 const server = http.createServer((req, res) => {
