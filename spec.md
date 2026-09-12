@@ -20,18 +20,19 @@ burns out — unless you can take *every* penalty and turn the night inside out.
 | Platforms | Browser, desktop and mobile, portrait and landscape; offline-capable, no backend required |
 | Rendering | 2D canvas (`#game-canvas`, `drawTable`) over DOM/CSS HUD. Painted table plate from `assets/table.webp`; hand, HUD and overlays are real DOM elements |
 | Audio | WebAudio: 20 authored Opus one-shots on an effects bus + a generative ambient pad on a music bus, each with a synthesized fallback |
-| Persistence | `localStorage` only (`hf-settings-v1`, `hf-progress-v1`) |
+| Persistence | `localStorage` (`hf-settings-v1`, `hf-progress-v1`), mirrored to the StarHermit cloud-save slot when a launch token is present |
 
 ### File map
 
 | Path | Contents |
 |---|---|
-| `index.html` | All ten screens as static markup; loads the four scripts in order |
+| `index.html` | All ten screens as static markup; loads the five scripts in order |
 | `css/style.css` | Complete stylesheet: palette tokens, screens, cards, HUD, overlays, key-art backgrounds |
 | `js/rng.js` | `HFRNG`: mulberry32 PRNG, FNV-1a `hashString`, three derived streams (rules / decor / av) |
 | `js/rules.js` | `HFRules`: the whole rules contract — deck, deal, pass, legality, trick resolution, scoring, terminal states, AI, hints, serialization |
 | `js/content.js` | `HFContent`: themes, 40 Journey stages, 6 Challenges, 3 Practice presets, the daily generator, 6 Learn lessons, achievement definitions |
-| `js/game.js` | `HFGame`: DOM wiring, screen navigation, session loop, AI pump, audio, canvas painting, results |
+| `js/platform.js` | `HFPlatform`: StarHermit adapter — launch-token read/strip, Bearer + 45-min refresh, profile nickname, cloud-save mirror (stored zip + base64), sync status; inert without a token |
+| `js/game.js` | `HFGame`: DOM wiring, screen navigation, session loop, AI pump, audio, canvas painting, results, local achievements, platform chip/adoption |
 | `js/three.min.js`, `vendor/three.module.min.js` | three.js r160 (MIT). Loaded but not used for rendering — see Known limitations |
 | `server.js` | Static file server (`PORT`, default 8000), path-traversal and dotfile guarded |
 | `sfx/` | 20 Opus clips + `manifest.txt` (canonical, code-bound) + `manifest.md`/`manifest.json` (generation prompts) |
@@ -457,27 +458,39 @@ Conventions: https://wiki.starhermit.com/
 ships a real `server.js` (a hardened static host: path-normalised, rejects escapes above the
 root and any dotfile segment, `PORT` from the environment).
 
-**Not used today.** No StarHermit HTTP call is made from `js/game.js`: identity, presence,
-sessions, leaderboards and achievements are all absent. The single `fetch` in the client is for
-`sfx/*.opus`. The game is fully playable with no network after load.
+**Hosted identity + cloud save (js/platform.js).** On-platform, the launch token arrives in the
+URL fragment `#game_token=<jwt>`, is read once and stripped (`history.replaceState`); the JWT
+payload (base64url decode, no verify) supplies `sub` and `game_scope` (the slug — never
+hard-coded). Every REST call sends `Authorization: Bearer`, and the scoped token is re-minted
+every 45 min via `POST /api/v1/games/{slug}/launch-token` (60 s retry on failure). The player
+name comes from `GET /api/v1/users/{sub}/profile` (never `/api/v1/me`, never usernames; fallback
+`Player ` + id.slice(0,8)) and is shown with the sync state in a chip on the title screen.
+Progress is mirrored to the single cloud-save slot `GET`/`PUT /api/v1/me/cloud-saves/{slug}` as
+a stored zip with a base64 body; the remote copy wins on load, saves are debounced 2 s and
+flushed on `pagehide`/`visibilitychange`, and `hf-settings-v1`/`hf-progress-v1` remain the
+offline cache. Without a token none of this runs and no network is touched.
 
 **Shaped for it.** The pieces a platform integration needs already exist and are deliberately
 platform-shaped: stable content ids (`j01`…`j40`, `c1`…`c6`, `daily-YYYY-MM-DD`),
-`CONTENT_VERSION`, a fixed nine-entry `ACHIEVEMENTS` table with stable lowercase keys, a
-per-table `parScore`, a fully deterministic engine plus `hashState` and `validateCommandShape`
-for server-side verification of a submitted command log, and a Daily whose ruleset is derived
-from the UTC date alone so every player's table is identical without a server telling them so.
-See **Design intent not yet implemented**.
+`CONTENT_VERSION`, a fixed nine-entry `ACHIEVEMENTS` table with stable lowercase keys (awarded
+locally and mirrored in the cloud doc — a pure browser game has no server-authoritative unlock
+path), a per-table `parScore`, a fully deterministic engine plus `hashState` and
+`validateCommandShape` for server-side verification of a submitted command log, and a Daily
+whose ruleset is derived from the UTC date alone so every player's table is identical without a
+server telling them so. Leaderboards are read-only by contract (clients can never submit); the
+game shows local records only and makes no leaderboard calls. Presence/sessions remain unwired.
 
 ---
 
 ## 13. Technical architecture
 
-**Module responsibilities.** Four classic scripts, loaded in dependency order and exposing UMD
+**Module responsibilities.** Five classic scripts, loaded in dependency order and exposing UMD
 globals so the same files run under Node in tests: `rng.js` (`HFRNG`) knows nothing about cards;
 `rules.js` (`HFRules`) knows nothing about the DOM, time or rendering and never calls
-`Math.random`; `content.js` (`HFContent`) is data plus pure expanders; `game.js` (`HFGame`) owns
-everything impure — DOM, audio, canvas, `localStorage`, `setTimeout`.
+`Math.random`; `content.js` (`HFContent`) is data plus pure expanders; `platform.js`
+(`HFPlatform`) owns the StarHermit adapter — launch token, profile nickname, cloud-save mirror —
+and is inert without a token; `game.js` (`HFGame`) owns everything else impure — DOM, audio,
+canvas, `localStorage`, `setTimeout`.
 
 **Determinism and replay.** See §4. A match is `(cfg, seed, command log)`; AI decisions are
 commands, so a log replays exactly. `hashState` gives a comparable fingerprint.
@@ -485,8 +498,10 @@ commands, so a log replays exactly. `hashState` gives a comparable fingerprint.
 **Persistence.** Two `localStorage` keys, both read through try/catch with a full default object
 so a blocked or corrupt store degrades to defaults rather than throwing: `hf-settings-v1`
 (`music`, `sfx`, `quality`, `reducedMotion`, `largeText`) and `hf-progress-v1`
-(`learn`/`journey`/`challenge`/`daily` → id → true). Progress is a set of completion marks only;
-no scores or times are stored.
+(`learn`/`journey`/`challenge`/`daily` → id → true, plus `achievements` → key → true and
+`stats` → `played`/`winStreak`). Progress is a set of completion marks only;
+no scores or times are stored. When hosted, both keys are mirrored to the cloud-save slot
+(remote wins on load); offline they are the whole store.
 
 **Performance budgets.** The canvas repaints only on `syncUI` (a state change) and `resize` —
 no rAF loop, so an idle table costs no frames; a repaint is one image draw, one scrim fill,
@@ -573,8 +588,10 @@ assert zero page errors.
 1. **No localization.** en-US strings are hard-coded in three places; the other eight required
    locales are absent (§10). Some toasts show raw rule ids (`must-follow-suit`,
    `hearts-not-broken`) instead of sentences.
-2. **No StarHermit API calls.** Identity, presence, sessions, leaderboards and achievements are
-   unused; `ACHIEVEMENTS` in `js/content.js` is defined but never awarded or displayed anywhere.
+2. **No server-authoritative records.** Identity, cloud save and token refresh are wired (§12),
+   but presence/sessions are unwired and there is no leaderboard submission (clients can never
+   submit) and no server-validated achievement unlock — achievements are local flags inside the
+   cloud-saved progress doc, awarded at match end, with no screen listing them.
 3. **three.js is loaded but unused.** `index.html` imports `js/three.min.js` (670 KB) and sets
    `window.THREE`; `js/game.js` reads it and `window.HFRender`, which no file defines, so `Render`
    is always `null`. `vendor/three.module.min.js` is a second identical copy. The table is drawn
@@ -602,12 +619,12 @@ assert zero page errors.
   `data/strings/<locale>.json` for en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT,
   `data-i18n` attributes on the static markup, the fallback chains, and `?lang=` / stored setting /
   `navigator.languages` selection. Rule-rejection ids get one localized sentence each.
-* **StarHermit integration**: sign the player in for identity, report presence while a match is
-  live, open a session per match and close it with the final score, submit Daily results to a
-  per-date leaderboard keyed on `daily-YYYY-MM-DD`, and award the nine defined achievements
-  idempotently by their stable keys. `server.js` grows a verification endpoint that replays a
-  submitted command log through `js/rules.js` and compares `hashState`, so a Daily leaderboard
-  entry can be trusted.
+* **StarHermit presence + validated Daily leaderboard**: report presence while a match is live,
+  open a session per match and close it with the final score, and submit Daily results to a
+  per-date leaderboard keyed on `daily-YYYY-MM-DD`. `server.js` grows a verification endpoint
+  that replays a submitted command log through `js/rules.js` and compares `hashState`, so a
+  Daily leaderboard entry can be trusted. (Identity, cloud save, token refresh and local
+  achievements shipped in §12; clients still can never submit to a leaderboard directly.)
 * **Theme application**: bind the level's `theme` palette to the canvas paint and to CSS custom
   properties, and gate the four unlockable themes on the `unlockStars` totals already authored.
 * **Per-level assists**: honour `mechanics.undo` / `mechanics.hint` from the level config instead

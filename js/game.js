@@ -5,6 +5,7 @@
 var Rules = window.HFRules;
 var Content = window.HFContent;
 var THREE = window.THREE;
+var Platform = window.HFPlatform || null; // StarHermit adapter; null-safe offline
 
 // ---------- settings ----------
 function loadSettings() {
@@ -23,13 +24,14 @@ function loadSettings() {
   return s;
 }
 function saveSettings() {
-  try { localStorage.setItem('hf-settings-v1', JSON.stringify(settings)); } catch (_) {}
+  writeLocalCache();
+  cloudPush();
 }
 var settings = loadSettings();
 
-// ---------- progress (local, per mode) ----------
+// ---------- progress (local, per mode; achievements + stats live here too) ----------
 function loadProgress() {
-  var p = { learn: {}, journey: {}, challenge: {}, daily: {} };
+  var p = { learn: {}, journey: {}, challenge: {}, daily: {}, achievements: {}, stats: { played: 0, winStreak: 0 } };
   try {
     var raw = localStorage.getItem('hf-progress-v1');
     if (raw) {
@@ -37,18 +39,36 @@ function loadProgress() {
       ['learn', 'journey', 'challenge', 'daily'].forEach(function (k) {
         if (q[k] && typeof q[k] === 'object') p[k] = q[k];
       });
+      if (q.achievements && typeof q.achievements === 'object') p.achievements = q.achievements;
+      if (q.stats && typeof q.stats === 'object') {
+        if (typeof q.stats.played === 'number') p.stats.played = q.stats.played;
+        if (typeof q.stats.winStreak === 'number') p.stats.winStreak = q.stats.winStreak;
+      }
     }
   } catch (_) {}
   return p;
 }
 function saveProgress() {
-  try { localStorage.setItem('hf-progress-v1', JSON.stringify(progress)); } catch (_) {}
+  writeLocalCache();
+  cloudPush();
 }
 var progress = loadProgress();
 function markDone(mode, id) {
   if (!progress[mode] || progress[mode][id]) return;
   progress[mode][id] = true;
   saveProgress();
+}
+
+// localStorage stays the offline cache; the cloud slot is only a mirror.
+function writeLocalCache() {
+  try { localStorage.setItem('hf-settings-v1', JSON.stringify(settings)); } catch (_) {}
+  try { localStorage.setItem('hf-progress-v1', JSON.stringify(progress)); } catch (_) {}
+}
+function collectDoc() {
+  return { v: 1, settings: settings, progress: progress, savedAt: new Date().toISOString() };
+}
+function cloudPush() {
+  if (Platform && Platform.isHosted()) Platform.push(collectDoc());
 }
 
 // ---------- audio (WebAudio): synthesized fallbacks + authored sample one-shots ----------
@@ -655,6 +675,35 @@ function goalMet(level, g) {
   return false;
 }
 
+// ---------- achievements: local awards by stable key, mirrored in the cloud doc ----------
+// A pure browser game has no server-authoritative unlock path, so these stay
+// local flags inside hf-progress-v1 (idempotent; part of the cloud save).
+function grantAchievement(newly, key) {
+  if (progress.achievements[key]) return;
+  progress.achievements[key] = true;
+  var def = Content.ACHIEVEMENTS.filter(function (a) { return a.key === key; })[0];
+  if (def) newly.push(def.name);
+}
+function awardAchievements(g) {
+  var won = g.terminal.winners.indexOf(0) >= 0;
+  progress.stats.played++;
+  progress.stats.winStreak = won ? progress.stats.winStreak + 1 : 0;
+  var newly = [];
+  if (won) grantAchievement(newly, 'first-win');
+  if (g.stats.eclipses[0] > 0) grantAchievement(newly, 'first-eclipse');
+  if (won && g.stats.queensTaken[0] === 0) grantAchievement(newly, 'queen-dodger');
+  if (g.roundSummaries.some(function (r) { return r.hearts && r.hearts[0] === 0; })) grantAchievement(newly, 'clean-round');
+  if (progress.stats.winStreak >= 3) grantAchievement(newly, 'streak-3');
+  if (progress.stats.played >= 50) grantAchievement(newly, 'matches-50');
+  var jdone = Content.JOURNEY.filter(function (lv) { return progress.journey[lv.id]; }).length;
+  if (jdone >= 20) grantAchievement(newly, 'journey-half');
+  if (jdone >= Content.JOURNEY.length) grantAchievement(newly, 'journey-done');
+  var ddone = Object.keys(progress.daily).filter(function (k) { return progress.daily[k]; }).length;
+  if (ddone >= 7) grantAchievement(newly, 'daily-7');
+  saveProgress();
+  if (newly.length) toast('Achievement unlocked: ' + newly.join(' · '));
+}
+
 function showResults() {
   var g = sess.game, ov = $('results-overlay');
   var t = g.terminal;
@@ -671,6 +720,7 @@ function showResults() {
       Content.goalText(S.level.goal) + (met ? ' — achieved' : ' — not met') + '</p>';
   }
   if (S.mode === 'daily') markDone('daily', S.level.date || S.id);
+  awardAchievements(g);
   ov.innerHTML = '<h2>' + head + '</h2><div class="panel">' + rows + goalLine + '</div>' +
     '<nav class="menu"><button data-act="again" class="primary big">Play again</button>' +
     '<button data-act="leave">Leave to title</button></nav>';
@@ -825,6 +875,67 @@ if (musicSlider) {
   musicSlider.addEventListener('input', function () {
     setMusicVolume(Number(musicSlider.value)); saveSettings();
   });
+}
+
+// ---------- StarHermit platform: hosted identity + cloud save (inert offline) ----------
+// The chip is the game's name/status slot: account nickname + sync state,
+// shown only when a launch token made us hosted. Remote doc wins on load.
+var SYNC_LABELS = { syncing: 'Syncing…', saving: 'Saving…', synced: 'Cloud synced', error: 'Cloud unreachable' };
+function renderPlayerChip() {
+  if (!Platform || !Platform.isHosted()) return;
+  var chip = $('player-chip');
+  if (!chip) return;
+  var name = Platform.nickname || ('Player ' + String(Platform.sub || '').slice(0, 8));
+  var label = SYNC_LABELS[Platform.sync];
+  chip.textContent = label ? name + ' \u00b7 ' + label : name;
+  chip.classList.remove('hidden');
+}
+function applySettingsToUI() {
+  var sl = $('set-sfx'); if (sl) sl.value = settings.sfx;
+  var ml = $('set-music'); if (ml) ml.value = settings.music;
+  var rm2 = $('set-reduced-motion'); if (rm2) rm2.checked = settings.reducedMotion;
+  var lt2 = $('set-large-text'); if (lt2) lt2.checked = settings.largeText;
+  document.body.classList.toggle('large-text', settings.largeText);
+  if (fxBus) fxBus.gain.value = sfxGainValue();
+  if (musicBus) musicBus.gain.value = musicGainValue() * 0.5;
+  if (screenNow === 'learn') renderLearn();
+  else if (screenNow === 'journey') renderJourney();
+  else if (screenNow === 'daily') renderDaily();
+  else if (screenNow === 'challenge') renderChallenge();
+}
+function adoptRemoteDoc(doc) {
+  if (!doc || typeof doc !== 'object') return;
+  var applied = false;
+  var s = doc.settings;
+  if (s && typeof s === 'object') {
+    if (typeof s.music === 'number') settings.music = s.music;
+    if (typeof s.sfx === 'number') settings.sfx = s.sfx;
+    if (typeof s.quality === 'string' && ['low', 'medium', 'high'].indexOf(s.quality) >= 0) settings.quality = s.quality;
+    if (typeof s.reducedMotion === 'boolean') settings.reducedMotion = s.reducedMotion;
+    if (typeof s.largeText === 'boolean') settings.largeText = s.largeText;
+    applied = true;
+  }
+  var q = doc.progress;
+  if (q && typeof q === 'object') {
+    ['learn', 'journey', 'challenge', 'daily'].forEach(function (k) {
+      if (q[k] && typeof q[k] === 'object') progress[k] = q[k];
+    });
+    if (q.achievements && typeof q.achievements === 'object') progress.achievements = q.achievements;
+    if (q.stats && typeof q.stats === 'object') {
+      if (typeof q.stats.played === 'number') progress.stats.played = q.stats.played;
+      if (typeof q.stats.winStreak === 'number') progress.stats.winStreak = q.stats.winStreak;
+    }
+    applied = true;
+  }
+  if (!applied) return;
+  writeLocalCache(); // adopt without re-pushing: the remote already holds this doc
+  applySettingsToUI();
+}
+if (Platform) {
+  Platform.onRemote(adoptRemoteDoc);
+  Platform.onStatus(renderPlayerChip);
+  Platform.init();
+  renderPlayerChip();
 }
 
 window.HFGame = {
