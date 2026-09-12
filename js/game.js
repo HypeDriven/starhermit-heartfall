@@ -562,6 +562,17 @@ function drawTable() {
   var g = sess.game;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = '15px system-ui, sans-serif';
+  // HUD exclusion bands (canvas coordinates): labels never sit under the
+  // objective block or behind the hand/action tray.
+  var cvRect = cv.getBoundingClientRect();
+  var hudRect = function (id) {
+    var el = $(id);
+    if (!el || el.classList.contains('hidden')) return null;
+    var r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    return { l: r.left - cvRect.left, t: r.top - cvRect.top, r: r.right - cvRect.left, b: r.bottom - cvRect.top };
+  };
+  var topBand = hudRect('hud-top'), bottomBand = hudRect('hud-bottom');
   for (var p = 0; p < g.players; p++) {
     var pos = seatPos(p, g.players, w, h);
     ctx.fillStyle = (g.phase === 'play' && g.actor === p) ? '#f7c948' : '#cfd8d2';
@@ -569,7 +580,10 @@ function drawTable() {
     // Keep side seats fully on screen at narrow widths.
     var half = ctx.measureText(label).width / 2 + 6;
     var lx = Math.max(half, Math.min(w - half, pos[0]));
-    ctx.fillText(label, lx, pos[1] - 24);
+    var ly = pos[1] - 24;
+    if (topBand && ly < topBand.b + 10 && lx + half > topBand.l && lx - half < topBand.r) ly = topBand.b + 12;
+    if (bottomBand && ly > bottomBand.t - 12 && lx + half > bottomBand.l && lx - half < bottomBand.r) ly = bottomBand.t - 14;
+    ctx.fillText(label, lx, ly);
   }
   // current trick around the centre
   ctx.font = '26px system-ui, sans-serif';
