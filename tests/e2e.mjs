@@ -9,7 +9,7 @@
  *   load → title → Play → Modes → Journey (40 stages) → stage 1 match:
  *     pass-phase card selection + Pass button → play-phase card clicks
  *     (only non-dimmed/legal cards) → pause via Escape → Resume → pause →
- *     Settings (quality change persisted) → back → play to the results
+ *     Settings (graphics preset change persisted) → back → play to the results
  *     overlay with score breakdown → Play again restarts → pause → Leave
  *     to title.
  *   Then Practice (Casual): Hint toast, pass, Undo (restores pre-pass
@@ -18,6 +18,10 @@
  *   Then Learn: lesson 1 applies its fixture (3-card hand, one legal
  *   card), completes on the forced play, persists progress, and the
  *   Next lesson button starts lesson 2.
+ *   Then Graphics: Settings → Graphics, Low then High (body/canvas
+ *   data-gfx-preset + summary), a per-effect override, reload keeps both,
+ *   choosing Ultra clears the override, a match renders at Ultra and at
+ *   Low, frame-rate readout toggles — with no console errors or warnings.
  *
  * Game state is read only through the visible DOM (#objective live text,
  * hand item .dim/.sel classes, overlay visibility) for synchronization;
@@ -100,7 +104,7 @@ async function runPass(vpName, contextOptions) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
-    if (m.type() === 'error' && !browserNoise.test(m.text())) errors.push(`console: ${m.text()}`);
+    if ((m.type() === 'error' || m.type() === 'warning') && !browserNoise.test(m.text())) errors.push(`console ${m.type()}: ${m.text()}`);
   });
 
   try {
@@ -165,9 +169,9 @@ async function runPass(vpName, contextOptions) {
             await page.waitForSelector('#pause-overlay:not(.hidden)');
             await page.click('#pause-overlay [data-act="settings"]');
             await page.waitForSelector('#screen-settings:not(.hidden)');
-            await page.click('[data-q="low"]');
+            await page.selectOption('#gfx-preset', 'low');
             const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('hf-settings-v1') || '{}'));
-            if (saved.quality !== 'low') throw new Error('quality setting not persisted');
+            if (!saved.gfx || saved.gfx.preset !== 'low') throw new Error('graphics preset not persisted');
             await page.screenshot({ path: SHOT('settings', vpName) });
             await page.click('#screen-settings [data-nav="back"]');
             await page.waitForSelector('#screen-play:not(.hidden)');
@@ -293,6 +297,82 @@ async function runPass(vpName, contextOptions) {
       await page.waitForSelector('#pause-overlay:not(.hidden)');
       await page.click('#pause-overlay [data-act="leave"]');
       await page.waitForSelector('#screen-title:not(.hidden)');
+    });
+
+    await step(`${vpName}: graphics settings — presets, override, persistence, Ultra/Low render`, async () => {
+      const gfxState = () => page.evaluate(() => ({
+        body: document.body.getAttribute('data-gfx-preset'),
+        canvas: document.getElementById('game-canvas').getAttribute('data-gfx-preset'),
+        preset: document.getElementById('gfx-preset').value,
+        shadows: document.getElementById('gfx-cat-shadows').value,
+        summary: document.getElementById('gfx-summary').textContent,
+        saved: JSON.parse(localStorage.getItem('hf-settings-v1') || '{}').gfx || {},
+      }));
+      await page.click('#screen-title [data-nav="settings"]');
+      await page.waitForSelector('#screen-settings:not(.hidden)');
+      await page.locator('#gfx-preset').scrollIntoViewIfNeeded();
+      const autoLabel = await page.locator('#gfx-preset option[value="auto"]').textContent();
+      if (!/Auto \(detected: /.test(autoLabel)) throw new Error('auto label: ' + autoLabel);
+      await page.selectOption('#gfx-preset', 'low');
+      let st = await gfxState();
+      if (st.body !== 'low' || st.canvas !== 'low' || !/no shadows/.test(st.summary)) throw new Error('low not applied: ' + JSON.stringify(st));
+      await page.selectOption('#gfx-preset', 'high');
+      st = await gfxState();
+      if (st.body !== 'high' || !/medium shadows/.test(st.summary)) throw new Error('high not applied: ' + JSON.stringify(st));
+      await page.locator('#gfx-cat-shadows').scrollIntoViewIfNeeded();
+      await page.selectOption('#gfx-cat-shadows', 'off');
+      st = await gfxState();
+      if (st.saved.shadows !== 'off' || !/no shadows/.test(st.summary)) throw new Error('override not applied: ' + JSON.stringify(st));
+      // the panel must fit the viewport width (no horizontal cut-off)
+      const overflow = await page.evaluate(() => {
+        const fs = document.getElementById('gfx-fieldset').getBoundingClientRect();
+        const worst = [...document.querySelectorAll('#gfx-fieldset select, #gfx-fieldset input, #gfx-fieldset label')]
+          .map((e) => e.getBoundingClientRect().right).reduce((a, b) => Math.max(a, b), 0);
+        return { fsRight: fs.right, worst, vw: window.innerWidth };
+      });
+      if (overflow.fsRight > overflow.vw + 1 || overflow.worst > overflow.fsRight + 1) throw new Error('graphics panel overflows: ' + JSON.stringify(overflow));
+      await page.screenshot({ path: SHOT('graphics', vpName), fullPage: true });
+
+      await page.reload({ waitUntil: 'load' });
+      await page.waitForSelector('#screen-title:not(.hidden)');
+      await page.click('#screen-title [data-nav="settings"]');
+      st = await gfxState();
+      if (st.preset !== 'high' || st.shadows !== 'off' || st.body !== 'high') throw new Error('graphics not restored after reload: ' + JSON.stringify(st));
+
+      await page.selectOption('#gfx-preset', 'ultra');
+      st = await gfxState();
+      if (st.shadows !== 'preset' || 'shadows' in st.saved || st.body !== 'ultra') throw new Error('preset did not clear overrides: ' + JSON.stringify(st));
+      await page.locator('#gfx-fps').check();
+      await page.waitForSelector('#fps-readout:not(.hidden)', { state: 'attached' });
+      await page.click('#screen-settings [data-nav="back"]');
+
+      for (const preset of ['ultra', 'low']) {
+        await page.waitForSelector('#screen-title:not(.hidden)');
+        if (preset === 'low') {
+          await page.click('#screen-title [data-nav="settings"]');
+          await page.selectOption('#gfx-preset', 'low');
+          await page.locator('#gfx-fps').uncheck();
+          await page.click('#screen-settings [data-nav="back"]');
+        }
+        await page.click('#btn-play');
+        await page.click('[data-mode="practice"]');
+        await page.locator('#practice-list li').first().click();
+        await page.waitForFunction(() => document.querySelectorAll('#hand li.card').length > 0);
+        await page.waitForTimeout(700);
+        const cvState = await page.evaluate(() => {
+          const c = document.getElementById('game-canvas');
+          return { preset: c.getAttribute('data-gfx-preset'), w: c.width, cw: c.clientWidth };
+        });
+        if (cvState.preset !== preset || !cvState.w) throw new Error('canvas not rendered at ' + preset + ': ' + JSON.stringify(cvState));
+        if (preset === 'low' && cvState.w !== cvState.cw) throw new Error('low must render at 1x: ' + JSON.stringify(cvState));
+        await page.screenshot({ path: SHOT('play-' + preset, vpName) });
+        await page.keyboard.press('Escape');
+        await page.waitForSelector('#pause-overlay:not(.hidden)');
+        await page.click('#pause-overlay [data-act="leave"]');
+      }
+      await page.waitForSelector('#screen-title:not(.hidden)');
+      const fpsHidden = await page.evaluate(() => document.getElementById('fps-readout').classList.contains('hidden'));
+      if (!fpsHidden) throw new Error('fps readout still visible after toggling off');
     });
   } finally {
     await context.close();

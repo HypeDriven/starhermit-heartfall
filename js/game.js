@@ -1,4 +1,4 @@
-/* Heartfall — main client module (browser): UI, session, audio, 3D render. */
+/* Heartfall — main client module (browser): UI, session, audio, canvas render, graphics settings. */
 (function () {
 'use strict';
 
@@ -6,17 +6,34 @@ var Rules = window.HFRules;
 var Content = window.HFContent;
 var THREE = window.THREE;
 var Platform = window.HFPlatform || null; // StarHermit adapter; null-safe offline
+var Gfx = window.HFGfx;        // pure graphics quality model (js/gfx.js)
+var Fx = window.HFTableFx;     // canvas effect passes (js/tablefx.js)
+
+// Graphics settings object (see HFGfx.resolve); unknown keys are dropped.
+function cleanGfx(g) {
+  var out = {};
+  if (!g || typeof g !== 'object') return out;
+  if (typeof g.preset === 'string') out.preset = g.preset;
+  if (typeof g.render_scale === 'number') out.render_scale = g.render_scale;
+  if (typeof g.adaptive === 'boolean') out.adaptive = g.adaptive;
+  if (typeof g.show_fps === 'boolean') out.show_fps = g.show_fps;
+  Object.keys(Gfx.CATEGORIES).forEach(function (c) {
+    if (Gfx.CATEGORIES[c].indexOf(g[c]) >= 0) out[c] = g[c];
+  });
+  return out;
+}
 
 // ---------- settings ----------
 function loadSettings() {
-  var s = { music: 80, sfx: 80, quality: 'high', reducedMotion: false, largeText: false };
+  var s = { music: 80, sfx: 80, gfx: { preset: 'auto' }, reducedMotion: false, largeText: false };
   try {
     var raw = localStorage.getItem('hf-settings-v1');
     if (raw) {
       var p = JSON.parse(raw);
       if (typeof p.music === 'number') s.music = p.music;
       if (typeof p.sfx === 'number') s.sfx = p.sfx;
-      if (typeof p.quality === 'string' && ['low', 'medium', 'high'].indexOf(p.quality) >= 0) s.quality = p.quality;
+      if (p.gfx && typeof p.gfx === 'object') s.gfx = cleanGfx(p.gfx);
+      else if (typeof p.quality === 'string') s.gfx = { preset: Gfx.fromLegacyQuality(p.quality) };
       if (typeof p.reducedMotion === 'boolean') s.reducedMotion = p.reducedMotion;
       if (typeof p.largeText === 'boolean') s.largeText = p.largeText;
     }
@@ -539,27 +556,109 @@ var tableArt = null;
   img.src = 'assets/table.webp';
 })();
 
-function drawTable() {
+// ---------- graphics: resolved quality, pixel ratio, animation loop ----------
+var gpuName = Fx.detectGpu();
+var detectedPreset = Gfx.detectPreset(gpuName, { mobile: Fx.isMobile() });
+var gfxLocale = (function () {
+  var q = null;
+  try { q = new URLSearchParams(location.search).get('lang'); } catch (_) {}
+  return Gfx.pickLocale([q].concat(navigator.languages || [navigator.language]));
+})();
+var canFilter = Fx.supportsFilter();
+var fxFailed = false;          // an effect pass threw: render without effects, say so in the panel
+var R = Gfx.resolve(settings.gfx, detectedPreset);
+var adaptiveScale = 1;
+var tableParticles = [], titleParticles = [];
+var baseLayer = null, baseKey = '';
+
+function prefersReducedMotion() {
+  try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (_) { return false; }
+}
+function gfxMotion() { return !settings.reducedMotion && !prefersReducedMotion(); }
+function gfxPixelRatio() { return Gfx.pixelRatio(R, window.devicePixelRatio || 1, adaptiveScale); }
+function effectsOn() { return !fxFailed; }
+
+// Size a canvas's backing store to its CSS box × the graphics pixel ratio;
+// returns the 2D context with a CSS-pixel transform, or null when not laid out.
+function fitCanvas(cv) {
+  var cw = cv.clientWidth, ch = cv.clientHeight;
+  if (!cw || !ch) return null;
+  var ratio = gfxPixelRatio();
+  var bw = Math.max(1, Math.round(cw * ratio)), bh = Math.max(1, Math.round(ch * ratio));
+  if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
+  var ctx = cv.getContext('2d');
+  ctx.setTransform(bw / cw, 0, 0, bh / ch, 0, 0);
+  return { ctx: ctx, w: cw, h: ch, bw: bw, bh: bh };
+}
+
+// The painted plate + scrim, graded (contrast/saturation) when the grade is on.
+// Graded plates are cached: ctx.filter is the one expensive step.
+function paintBase(ctx, w, h, bw, bh) {
+  function paint(c) {
+    c.fillStyle = '#17251d';
+    c.fillRect(0, 0, w, h);
+    if (tableArt && tableArt.width) {
+      var side = Math.max(w, h) * 1.06;   // cover: no letterbox at any aspect
+      if (R.grade === 'on' && canFilter && effectsOn()) c.filter = 'contrast(1.08) saturate(1.15) brightness(1.03)';
+      c.drawImage(tableArt, (w - side) / 2, (h - side) / 2, side, side);
+      c.filter = 'none';
+      c.fillStyle = 'rgba(9,14,26,0.38)';  // scrim: keeps HUD text above 4.5:1
+      c.fillRect(0, 0, w, h);
+    } else {
+      c.fillStyle = '#1f3328';
+      c.beginPath(); c.ellipse(w / 2, h / 2, w * 0.38, h * 0.34, 0, 0, Math.PI * 2); c.fill();
+    }
+  }
+  if (R.grade !== 'on' || !canFilter || !effectsOn()) { paint(ctx); return; }
+  var key = [bw, bh, !!(tableArt && tableArt.width)].join('x');
+  if (!baseLayer || baseKey !== key) {
+    baseLayer = document.createElement('canvas');
+    baseLayer.width = bw; baseLayer.height = bh;
+    var bc = baseLayer.getContext('2d');
+    bc.setTransform(bw / w, 0, 0, bh / h, 0, 0);
+    paint(bc);
+    baseKey = key;
+  }
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(baseLayer, 0, 0);
+  ctx.restore();
+}
+
+// Lamp pool, moonlight, fireflies and vignette, between the plate and the cards.
+function paintAtmosphere(ctx, w, h, t, particles, lamp) {
+  if (!effectsOn()) return;
+  try {
+    var anim = gfxMotion() && R.background === 'animated';
+    if (R.lighting === 'lamp') {
+      Fx.drawMoonWash(ctx, w, h, anim ? t : 0);
+      Fx.drawLampPool(ctx, lamp[0], lamp[1], lamp[2], anim ? Fx.flicker(t) : 0.6, R);
+    }
+    Fx.drawParticles(ctx, particles, w, h, R);
+    if (R.grade === 'on') Fx.drawVignette(ctx, w, h, 0.5);
+  } catch (_) {
+    fxFailed = true;   // render without effects from now on; the Graphics panel says so
+    refreshGfxPanel();
+  }
+}
+
+function syncParticles() {
+  if (tableParticles.length !== R.particleCount) tableParticles = Fx.makeParticles(R.particleCount, 0x4ea7f1);
+  if (titleParticles.length !== R.particleCount) titleParticles = Fx.makeParticles(R.particleCount, 0x1c3d9);
+}
+
+function drawTable(tNow) {
   var cv = $('game-canvas');
   if (!cv || !sess) return;
-  if (cv.clientWidth > 0 && (cv.width !== cv.clientWidth || cv.height !== cv.clientHeight)) {
-    cv.width = cv.clientWidth; cv.height = cv.clientHeight;
-  }
-  var ctx = cv.getContext('2d');
-  var w = cv.width, h = cv.height;
-  ctx.fillStyle = '#17251d';
-  ctx.fillRect(0, 0, w, h);
-  if (tableArt && tableArt.width) {
-    var side = Math.max(w, h) * 1.06;   // cover: no letterbox at any aspect
-    ctx.drawImage(tableArt, (w - side) / 2, (h - side) / 2, side, side);
-    ctx.fillStyle = 'rgba(9,14,26,0.38)';  // scrim: keeps HUD text above 4.5:1
-    ctx.fillRect(0, 0, w, h);
-  } else {
-    ctx.fillStyle = '#1f3328';
-    ctx.beginPath(); ctx.ellipse(w / 2, h / 2, w * 0.38, h * 0.34, 0, 0, Math.PI * 2); ctx.fill();
-  }
+  var fit = fitCanvas(cv);
+  if (!fit) return;
+  var ctx = fit.ctx, w = fit.w, h = fit.h;
+  var t = (tNow || performance.now()) / 1000;
+  paintBase(ctx, w, h, fit.bw, fit.bh);
+  paintAtmosphere(ctx, w, h, t, tableParticles, [w / 2, h * 0.47, Math.max(w, h) * 0.55]);
   if (!sess.game) return;
   var g = sess.game;
+  var Rx = effectsOn() ? R : Gfx.resolve({ preset: 'low' });
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = '15px system-ui, sans-serif';
   // HUD exclusion bands (canvas coordinates): labels never sit under the
@@ -573,27 +672,26 @@ function drawTable() {
     return { l: r.left - cvRect.left, t: r.top - cvRect.top, r: r.right - cvRect.left, b: r.bottom - cvRect.top };
   };
   var topBand = hudRect('hud-top'), bottomBand = hudRect('hud-bottom');
+  var pad = Rx.detail === 'detailed' ? 15 : 6;   // room for the label pill
   for (var p = 0; p < g.players; p++) {
     var pos = seatPos(p, g.players, w, h);
-    ctx.fillStyle = (g.phase === 'play' && g.actor === p) ? '#f7c948' : '#cfd8d2';
     var label = seatLabel(p) + ' (' + g.hands[p].length + ')';
     // Keep side seats fully on screen at narrow widths.
-    var half = ctx.measureText(label).width / 2 + 6;
+    var half = ctx.measureText(label).width / 2 + pad;
     var lx = Math.max(half, Math.min(w - half, pos[0]));
     var ly = pos[1] - 24;
-    if (topBand && ly < topBand.b + 10 && lx + half > topBand.l && lx - half < topBand.r) ly = topBand.b + 12;
-    if (bottomBand && ly > bottomBand.t - 12 && lx + half > bottomBand.l && lx - half < bottomBand.r) ly = bottomBand.t - 14;
-    ctx.fillText(label, lx, ly);
+    if (topBand && ly < topBand.b + 10 && lx + half > topBand.l && lx - half < topBand.r) ly = topBand.b + 14;
+    if (bottomBand && ly > bottomBand.t - 12 && lx + half > bottomBand.l && lx - half < bottomBand.r) ly = bottomBand.t - 16;
+    Fx.drawLabel(ctx, label, lx, ly, g.phase === 'play' && g.actor === p, Rx);
   }
   // current trick around the centre
-  ctx.font = '26px system-ui, sans-serif';
-  g.trick.forEach(function (e, i) {
+  g.trick.forEach(function (e) {
     var pos = seatPos(e.p, g.players, w, h);
     var cx = w / 2 + (pos[0] - w / 2) * 0.35, cy = h / 2 + (pos[1] - h / 2) * 0.35;
-    ctx.fillStyle = '#f4f1e8';
-    ctx.fillRect(cx - 24, cy - 34, 48, 68);
-    ctx.fillStyle = Rules.cardSuit(e.card) === 1 || Rules.cardSuit(e.card) === 2 ? '#b3372c' : '#222831';
-    ctx.fillText(cardLabel(e.card), cx, cy);
+    var suit = Rules.cardSuit(e.card);
+    var ink = suit === 1 || suit === 2 ? '#b3372c' : '#222831';
+    var tilt = (((e.card * 37) % 9) - 4) * Math.PI / 180;
+    Fx.drawCard(ctx, cx, cy, cardLabel(e.card), ink, tilt, Rx);
   });
   ctx.font = '13px system-ui, sans-serif';
   ctx.fillStyle = '#cfe0ff';
@@ -602,6 +700,192 @@ function drawTable() {
   ctx.fillText('Round ' + g.round + (g.heartsBroken ? ' · hearts broken' : ''), 12, 12);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+}
+
+// Title screen atmosphere over the key art: the lamp's glow, the moon's halo,
+// fireflies and a vignette. Hidden (and never drawn) when all of those are off.
+var KEYART = { w: 1536, h: 864, lamp: [910, 451], moon: [768, 272] };
+function titleFxOn() {
+  return effectsOn() && (R.lighting === 'lamp' || R.particleCount > 0 || R.grade === 'on' || R.bloom === 'on');
+}
+function drawTitleFx(tNow) {
+  var cv = $('title-fx');
+  if (!cv) return;
+  var on = titleFxOn();
+  cv.classList.toggle('hidden', !on);
+  if (!on || screenNow !== 'title') return;
+  var fit = fitCanvas(cv);
+  if (!fit) return;
+  var ctx = fit.ctx, w = fit.w, h = fit.h;
+  var t = (tNow || performance.now()) / 1000;
+  ctx.clearRect(0, 0, w, h);
+  var s = Math.max(w / KEYART.w, h / KEYART.h);
+  var ox = (w - KEYART.w * s) / 2, oy = (h - KEYART.h * s) / 2;
+  var lamp = [ox + KEYART.lamp[0] * s, oy + KEYART.lamp[1] * s, Math.max(w, h) * 0.32];
+  try {
+    var anim = gfxMotion() && R.background === 'animated';
+    if (R.bloom === 'on') {
+      var mr = 150 * s;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.28;
+      ctx.drawImage(Fx.glowSprite('200,220,255'), ox + KEYART.moon[0] * s - mr, oy + KEYART.moon[1] * s - mr, mr * 2, mr * 2);
+      ctx.restore();
+    }
+    if (R.lighting === 'lamp') Fx.drawLampPool(ctx, lamp[0], lamp[1], lamp[2], anim ? Fx.flicker(t) : 0.6, R, true);
+    Fx.drawParticles(ctx, titleParticles, w, h, R);
+    if (R.grade === 'on') Fx.drawVignette(ctx, w, h, 0.45);
+  } catch (_) {
+    fxFailed = true;
+    cv.classList.add('hidden');
+    refreshGfxPanel();
+  }
+}
+
+var loopId = 0, lastFrame = 0;
+var frameStats = { n: 0, interval: 0, work: 0, fpsN: 0, fpsSum: 0 };
+var fpsNow = 0;
+function wantLoop() {
+  if (!R.animated || !gfxMotion() || document.hidden || !effectsOn()) return false;
+  if (screenNow === 'play') return !!(sess && sess.game);
+  return screenNow === 'title' && titleFxOn();
+}
+function ensureLoop() {
+  if (loopId || !wantLoop()) { renderFps(); return; }
+  lastFrame = 0;
+  loopId = requestAnimationFrame(frame);
+}
+function frame(now) {
+  loopId = 0;
+  if (!wantLoop()) { fpsNow = 0; renderFps(); return; }
+  var dt = lastFrame ? Math.min(0.1, (now - lastFrame) / 1000) : 0;
+  var t0 = performance.now();
+  if (screenNow === 'play') { Fx.stepParticles(tableParticles, dt); drawTable(now); }
+  else { Fx.stepParticles(titleParticles, dt); drawTitleFx(now); }
+  if (lastFrame) sampleFrame(now - lastFrame, performance.now() - t0);
+  lastFrame = now;
+  loopId = requestAnimationFrame(frame);
+}
+// Adaptive resolution: over ~90 frames, a slow average frame (>26 ms) steps the
+// scale down 0.1 (to 0.6); when our own drawing is cheap (<14 ms) it steps back up 0.05.
+function sampleFrame(interval, work) {
+  var st = frameStats;
+  st.n++; st.interval += interval; st.work += work;
+  st.fpsN++; st.fpsSum += interval;
+  if (st.fpsN >= 30) { fpsNow = Math.round(1000 / (st.fpsSum / st.fpsN)); st.fpsN = 0; st.fpsSum = 0; renderFps(); }
+  if (st.n < 90) return;
+  var avgI = st.interval / st.n, avgW = st.work / st.n;
+  st.n = 0; st.interval = 0; st.work = 0;
+  if (!R.adaptive) { adaptiveScale = 1; return; }
+  var next = avgI > 26 ? Gfx.adaptStep(adaptiveScale, avgI) : Gfx.adaptStep(adaptiveScale, avgW);
+  if (next !== adaptiveScale) { adaptiveScale = next; refreshGfxSummary(); }
+}
+function renderFps() {
+  var el = $('fps-readout');
+  if (!el) return;
+  el.classList.toggle('hidden', !R.showFps);
+  if (!R.showFps) return;
+  el.textContent = loopId || fpsNow ? Gfx.t(gfxLocale, 'fps', { n: fpsNow || '…' }) : Gfx.t(gfxLocale, 'fpsStatic');
+}
+
+// Apply the saved graphics settings live: body/canvas attributes and classes
+// for the DOM side (hand cards, title glow), canvas repaint, loop start/stop.
+function applyGraphics() {
+  R = Gfx.resolve(settings.gfx, detectedPreset);
+  if (!R.adaptive) adaptiveScale = 1;
+  syncParticles();
+  baseLayer = null;
+  var b = document.body;
+  b.setAttribute('data-gfx-preset', R.preset);
+  b.classList.toggle('gfx-detailed', R.detail === 'detailed');
+  b.classList.toggle('gfx-bloom', R.bloom === 'on');
+  b.classList.toggle('reduce-motion', !gfxMotion());
+  ['off', 'low', 'medium', 'high'].forEach(function (tier) { b.classList.toggle('gfx-shadows-' + tier, R.shadows === tier); });
+  var cv = $('game-canvas');
+  if (cv) cv.setAttribute('data-gfx-preset', R.preset);
+  drawTable();
+  drawTitleFx();
+  refreshGfxPanel();
+  ensureLoop();
+}
+
+// ---------- Graphics settings panel (built into the Settings screen) ----------
+function gt(key, vars) { return Gfx.t(gfxLocale, key, vars); }
+function tierName(cat, tier) { return gt('tier.' + tier); }
+function buildGfxPanel() {
+  var fs = $('gfx-fieldset');
+  if (!fs) return;
+  fs.setAttribute('lang', gfxLocale);
+  $('gfx-legend').textContent = gt('graphics');
+  var html = '';
+  html += '<div class="gfx-row"><label for="gfx-preset">' + gt('quality') + '</label><select id="gfx-preset" data-gfx="preset"></select></div>';
+  html += '<div class="gfx-row gfx-scale"><label for="gfx-scale">' + gt('renderScale') + '</label>' +
+    '<span id="gfx-scale-val" class="gfx-val"></span></div>' +
+    '<input type="range" id="gfx-scale" data-gfx="render_scale" min="50" max="200" step="5">';
+  Object.keys(Gfx.CATEGORIES).forEach(function (cat) {
+    html += '<div class="gfx-row"><label for="gfx-cat-' + cat + '">' + gt('cat.' + cat) + '</label>' +
+      '<select id="gfx-cat-' + cat + '" data-gfx-cat="' + cat + '"></select></div>';
+  });
+  html += '<label class="chk"><input type="checkbox" id="gfx-adaptive" data-gfx="adaptive"> ' + gt('adaptive') + '</label>';
+  html += '<label class="chk"><input type="checkbox" id="gfx-fps" data-gfx="show_fps"> ' + gt('showFps') + '</label>';
+  html += '<p id="gfx-summary" class="gfx-summary" aria-live="polite"></p>';
+  html += '<p id="gfx-note" class="gfx-note hidden" role="note"></p>';
+  fs.insertAdjacentHTML('beforeend', html);
+
+  $('gfx-preset').addEventListener('change', function (e) {
+    settings.gfx = Gfx.choosePreset(settings.gfx, e.target.value);
+    saveSettings(); applyGraphics();
+  });
+  $('gfx-scale').addEventListener('input', function (e) {
+    settings.gfx.render_scale = Number(e.target.value) / 100;
+    saveSettings(); applyGraphics();
+  });
+  fs.querySelectorAll('[data-gfx-cat]').forEach(function (sel) {
+    sel.addEventListener('change', function () {
+      var cat = sel.getAttribute('data-gfx-cat');
+      if (sel.value === 'preset') delete settings.gfx[cat]; else settings.gfx[cat] = sel.value;
+      saveSettings(); applyGraphics();
+    });
+  });
+  $('gfx-adaptive').addEventListener('change', function (e) { settings.gfx.adaptive = e.target.checked; saveSettings(); applyGraphics(); });
+  $('gfx-fps').addEventListener('change', function (e) { settings.gfx.show_fps = e.target.checked; saveSettings(); applyGraphics(); });
+}
+function fillSelect(sel, options, value) {
+  sel.innerHTML = options.map(function (o) {
+    return '<option value="' + o[0] + '"' + (o[0] === value ? ' selected' : '') + '>' + o[1] + '</option>';
+  }).join('');
+  sel.value = value;
+}
+function refreshGfxPanel() {
+  var ps = $('gfx-preset');
+  if (!ps) return;
+  var sv = settings.gfx || {};
+  fillSelect(ps, [['auto', gt('auto', { tier: gt(detectedPreset) })]].concat(
+    Gfx.PRESETS.map(function (p) { return [p, gt(p)]; })), R.auto ? 'auto' : R.preset);
+  Object.keys(Gfx.CATEGORIES).forEach(function (cat) {
+    var sel = $('gfx-cat-' + cat);
+    fillSelect(sel, [['preset', gt('fromPreset', { tier: tierName(cat, Gfx.presetTier(R.preset, cat)) })]].concat(
+      Gfx.CATEGORIES[cat].map(function (tier) { return [tier, tierName(cat, tier)]; })),
+      Gfx.CATEGORIES[cat].indexOf(sv[cat]) >= 0 ? sv[cat] : 'preset');
+  });
+  var pct = Math.round(R.renderScale * 100);
+  $('gfx-scale').value = pct;
+  $('gfx-scale-val').textContent = pct + '%';
+  $('gfx-adaptive').checked = R.adaptive;
+  $('gfx-fps').checked = R.showFps;
+  var note = $('gfx-note');
+  var missing = fxFailed || (!canFilter && R.grade === 'on');
+  note.textContent = missing ? gt('postNote') : '';
+  note.classList.toggle('hidden', !missing);
+  refreshGfxSummary();
+}
+function refreshGfxSummary() {
+  var el = $('gfx-summary');
+  if (!el) return;
+  var ratio = gfxPixelRatio();
+  var px = [Math.round(window.innerWidth * ratio), Math.round(window.innerHeight * ratio)];
+  var shown = effectsOn() ? R : Gfx.resolve({ preset: 'low' });
+  el.textContent = (gpuName || gt('gpuUnknown')) + ' · ' + Gfx.describe(shown, px, gfxLocale);
 }
 
 function syncUI() {
@@ -757,6 +1041,10 @@ showScreen = function (name) {
   screenNow = name;
   if (name !== 'play') $('toast').classList.add('hidden'); // no stale toasts over menus
   _showScreen(name);
+  document.body.setAttribute('data-screen', name);
+  if (name === 'title') drawTitleFx();
+  if (name === 'settings') refreshGfxSummary();
+  ensureLoop();
 };
 
 function navTo(name) {
@@ -839,14 +1127,14 @@ window.addEventListener('keydown', function (e) {
   if (e.key === 'u' || e.key === 'U') doUndo();
   if (e.key === 'h' || e.key === 'H') doHint();
 });
-window.addEventListener('resize', function () { drawTable(); });
-document.querySelectorAll('[data-q]').forEach(function (b) {
-  b.addEventListener('click', function () {
-    settings.quality = b.getAttribute('data-q'); saveSettings();
-  });
-});
+window.addEventListener('resize', function () { drawTable(); drawTitleFx(); refreshGfxSummary(); });
+document.addEventListener('visibilitychange', ensureLoop);
+try { window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', applyGraphics); } catch (_) {}
+document.body.setAttribute('data-screen', screenNow);
+buildGfxPanel();
+applyGraphics();
 var rmChk = $('set-reduced-motion');
-if (rmChk) { rmChk.checked = settings.reducedMotion; rmChk.addEventListener('change', function () { settings.reducedMotion = rmChk.checked; saveSettings(); }); }
+if (rmChk) { rmChk.checked = settings.reducedMotion; rmChk.addEventListener('change', function () { settings.reducedMotion = rmChk.checked; saveSettings(); applyGraphics(); }); }
 var ltChk = $('set-large-text');
 if (ltChk) { ltChk.checked = settings.largeText; ltChk.addEventListener('change', function () { settings.largeText = ltChk.checked; saveSettings(); document.body.classList.toggle('large-text', ltChk.checked); }); }
 if (settings.largeText) document.body.classList.add('large-text');
@@ -910,6 +1198,7 @@ function applySettingsToUI() {
   var rm2 = $('set-reduced-motion'); if (rm2) rm2.checked = settings.reducedMotion;
   var lt2 = $('set-large-text'); if (lt2) lt2.checked = settings.largeText;
   document.body.classList.toggle('large-text', settings.largeText);
+  applyGraphics();
   if (fxBus) fxBus.gain.value = sfxGainValue();
   if (musicBus) musicBus.gain.value = musicGainValue() * 0.5;
   if (screenNow === 'learn') renderLearn();
@@ -924,7 +1213,7 @@ function adoptRemoteDoc(doc) {
   if (s && typeof s === 'object') {
     if (typeof s.music === 'number') settings.music = s.music;
     if (typeof s.sfx === 'number') settings.sfx = s.sfx;
-    if (typeof s.quality === 'string' && ['low', 'medium', 'high'].indexOf(s.quality) >= 0) settings.quality = s.quality;
+    if (s.gfx && typeof s.gfx === 'object') settings.gfx = cleanGfx(s.gfx);
     if (typeof s.reducedMotion === 'boolean') settings.reducedMotion = s.reducedMotion;
     if (typeof s.largeText === 'boolean') settings.largeText = s.largeText;
     applied = true;

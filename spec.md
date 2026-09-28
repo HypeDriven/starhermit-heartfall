@@ -18,7 +18,7 @@ burns out — unless you can take *every* penalty and turn the night inside out.
 | Players | 1 human (seat 0) + 1–3 AI seats; tables of 2, 3 or 4 |
 | Session length | 90 s (a Learn lesson) to ~12 min (a 100-point Journey match); one round is ~60–90 s |
 | Platforms | Browser, desktop and mobile, portrait and landscape; offline-capable, no backend required |
-| Rendering | 2D canvas (`#game-canvas`, `drawTable`) over DOM/CSS HUD. Painted table plate from `assets/table.webp`; hand, HUD and overlays are real DOM elements |
+| Rendering | 2D canvas (`#game-canvas`, `drawTable`) over DOM/CSS HUD, plus a title-screen effects canvas (`#title-fx`). Painted table plate from `assets/table.webp`; hand, HUD and overlays are real DOM elements. Quality presets and per-effect overrides (§8 **Graphics**) |
 | Audio | WebAudio: 20 authored Opus one-shots on an effects bus + a generative ambient pad on a music bus, each with a synthesized fallback |
 | Persistence | `localStorage` (`hf-settings-v1`, `hf-progress-v1`), mirrored to the StarHermit cloud-save slot when a launch token is present |
 
@@ -32,13 +32,15 @@ burns out — unless you can take *every* penalty and turn the night inside out.
 | `js/rules.js` | `HFRules`: the whole rules contract — deck, deal, pass, legality, trick resolution, scoring, terminal states, AI, hints, serialization |
 | `js/content.js` | `HFContent`: themes, 40 Journey stages, 6 Challenges, 3 Practice presets, the daily generator, 6 Learn lessons, achievement definitions |
 | `js/platform.js` | `HFPlatform`: StarHermit adapter — launch-token read/strip, Bearer + 45-min refresh, profile nickname, cloud-save mirror (stored zip + base64), sync status; inert without a token |
-| `js/game.js` | `HFGame`: DOM wiring, screen navigation, session loop, AI pump, audio, canvas painting, results, local achievements, platform chip/adoption |
+| `js/gfx.js` | `HFGfx`: pure graphics quality model — presets, categories, `detectPreset`, `resolve`, `choosePreset`, `presetTier`, `describe`, `adaptStep`, `pixelRatio`, and the Graphics panel strings in all nine locales |
+| `js/tablefx.js` | `HFTableFx`: 2D canvas effect passes — GPU probe, lamp pool, moonlight wash, glow sprites (bloom), fireflies, vignette, detailed card faces, seat-label pills |
+| `js/game.js` | `HFGame`: DOM wiring, screen navigation, session loop, AI pump, audio, canvas painting, graphics application + animation loop + Graphics panel, results, local achievements, platform chip/adoption |
 | `js/three.min.js`, `vendor/three.module.min.js` | three.js r160 (MIT). Loaded but not used for rendering — see Known limitations |
 | `server.js` | Static file server (`PORT`, default 8000), path-traversal and dotfile guarded |
 | `sfx/` | 20 Opus clips + `manifest.txt` (canonical, code-bound) + `manifest.md`/`manifest.json` (generation prompts) |
 | `assets/` | `keyart.webp`, `table.webp`, `eclipse.webp` |
 | `coverart.png` | 1200×675 store cover |
-| `tests/rules-sanity.mjs`, `tests/lesson-check.mjs` | `npm test` |
+| `tests/rules-sanity.mjs`, `tests/lesson-check.mjs`, `tests/gfx.test.mjs` | `npm test` (the last under `node --test`) |
 | `tests/e2e.mjs` | Playwright playthrough of the real UI at desktop and mobile |
 | `starhermit.txt` | Platform manifest: name, launch, owner, server, version, contentVersion, cover |
 
@@ -336,9 +338,40 @@ buttons, hairline `--line` rules between list rows — no bevels except the pain
 48 px; card faces 20 px desktop / 14 px mobile; canvas text 15 px seat labels, 26 px trick cards,
 13 px round line. The cover wordmark is letter-spaced DejaVu Serif Bold.
 
-**Motion.** Almost none, deliberately: no card tweening, no shuffle animation. The only timing is
-the 450 ms gap between AI plays that lets you read each card as it lands, plus a 2.2 s toast
-dwell. Nothing moves, so `Settings → Reduced motion` has nothing to switch off.
+**Motion.** Quiet and ambient: no card tweening, no shuffle animation. Game timing is the 450 ms
+gap between AI plays that lets you read each card as it lands, plus a 2.2 s toast dwell. At
+presets with ambient motion the lamp light breathes, the moonlight drifts and fireflies wander;
+with detailed cards, hand cards lift 6 px on hover and selected/hinted cards sit raised. All of
+it stops under `Settings → Reduced motion` or the OS `prefers-reduced-motion` (the scene is then
+drawn once, still, with fireflies frozen in place).
+
+**Graphics.** The table is a layered 2D canvas: the painted plate (optionally colour-graded with
+contrast/saturation via `ctx.filter`, cached in an offscreen layer) under the legibility scrim,
+then a warm lamp pool over the table centre and a cool moonlight wash from the upper left
+(additive), drifting fireflies/moon motes (seeded, additive, with pre-blurred glow sprites when
+bloom is on), a vignette, and on top the seat labels (dark pill backdrop when detailed, drop
+shadow, gold glow on the active seat with bloom) and trick cards (detailed: cream paper gradient,
+gilt hairline, corner index, clear-coat sheen, a deterministic ±4° tilt; drop shadow per shadows
+tier). The title screen gets its own effects canvas over the key art: a flickering glow on the
+painted oil lamp, a moon halo, fireflies and a vignette; it is hidden and never drawn when those
+effects are off. DOM hand cards follow the same tiers (paper gradient, gilt inset, sheen and
+shadow depth), and bloom adds a warm halo to the wordmark and the active score.
+The Settings screen's **Graphics** section offers a quality preset (Auto — chosen from the WebGL
+unmasked renderer string, software renderers get Low, discrete GPUs and Apple M get High, others
+Balanced, capped at Balanced on touch/mobile devices; Low; Balanced; High; Ultra), a render scale
+(50–200 % of the preset's; the canvas backing store is `min(dpr, cap) × preset scale × render
+scale × adaptive`, cap 1 at Low, 1.5 at Balanced, 2 at High/Ultra, Ultra ×1.25), one override per
+effect — Shadows (off/low/medium/high), Lighting (flat/lamplight), Bloom, Colour grade & vignette,
+Fireflies (off/low 18/high 48), Ambient motion (still/animated), Card detail (plain/detailed) —
+each defaulting to "From preset (…)", adaptive resolution (over ~90 frames, a >26 ms average
+frame steps the scale down 0.1 to 0.6; cheap frames step it back up 0.05 to 1) and a frame-rate
+readout (top-left under the round line in play, bottom-left elsewhere, never intercepting input),
+plus a summary line "GPU · effects · W×H px". Choosing a preset clears overrides; changes apply
+immediately without reload and persist in `hf-settings-v1.gfx`. The per-frame loop runs only when
+fireflies or ambient motion are on, the table or title is visible and the tab is shown; Low draws
+exactly the original single plate + scrim + flat cards at 1× on state changes only. If an effect
+pass throws (or the browser lacks `ctx.filter` for the grade) the table is drawn without it and
+the panel says so. `body` and `#game-canvas` carry `data-gfx-preset`.
 
 **The hero** is your hand; the plate, the scrim and the score row are deliberately lower contrast
 so the 13 cards you are choosing between read first.
@@ -403,7 +436,9 @@ seat caused them.
 
 ## 10. Localization
 
-**Shipped today: en-US only.** All player-visible text is hard-coded English, in three places:
+**Shipped today: en-US only**, except the Settings → Graphics section, whose strings live in
+`js/gfx.js` for all nine locales below (en-GB, es-ES and fr-CA inherit their base and override
+where they differ), chosen from `?lang=` then `navigator.languages`. All other player-visible text is hard-coded English, in three places:
 static markup in `index.html` (menu labels, mode cards, settings legends), the `HELP_TEXT` array
 and toast strings in `js/game.js`, and the authored content strings in `js/content.js` (stage
 names, intros, `GOAL_TEXT`, persona names, achievement names/descriptions). Some toasts surface
@@ -440,7 +475,8 @@ See **Design intent not yet implemented**.
 * **Contrast.** `#dbe7ff` on `#0d1526` ~14:1; secondary `#9fb0cc` ~7.5:1; card ink on the card
   face ~14:1; penalty red `#b3372c` ~5.4:1 and never the only cue (the suit glyph is printed too).
 * **Reduced motion / larger text.** Two persisted Settings toggles; `.large-text` is applied to
-  `<body>`, and there is no animation for reduced motion to switch off.
+  `<body>`. Reduced motion (or the OS preference) stops the ambient lamp/firefly animation and the
+  hand-card hover transitions (`body.reduce-motion`).
 * **Target sizes.** ⏸ and the back arrow are 44×44 px. Mobile cards are 44×62 px overlapped by
   16 px, exposing a 28 px strip per inner card — under the guideline, and the price of showing a
   whole 13-card hand at once (Known limitations #4).
@@ -497,15 +533,19 @@ commands, so a log replays exactly. `hashState` gives a comparable fingerprint.
 
 **Persistence.** Two `localStorage` keys, both read through try/catch with a full default object
 so a blocked or corrupt store degrades to defaults rather than throwing: `hf-settings-v1`
-(`music`, `sfx`, `quality`, `reducedMotion`, `largeText`) and `hf-progress-v1`
+(`music`, `sfx`, `gfx` — preset, render_scale, adaptive, show_fps and per-effect overrides —
+`reducedMotion`, `largeText`; an old `quality` value migrates once: low → Low, medium →
+Balanced, high → Auto) and `hf-progress-v1`
 (`learn`/`journey`/`challenge`/`daily` → id → true, plus `achievements` → key → true and
 `stats` → `played`/`winStreak`). Progress is a set of completion marks only;
 no scores or times are stored. When hosted, both keys are mirrored to the cloud-save slot
 (remote wins on load); offline they are the whole store.
 
-**Performance budgets.** The canvas repaints only on `syncUI` (a state change) and `resize` —
-no rAF loop, so an idle table costs no frames; a repaint is one image draw, one scrim fill,
-`players` labels and up to `players` card rectangles. Shipped payload excluding the unused
+**Performance budgets.** With still presets (Low, Balanced) the canvas repaints only on `syncUI`
+(a state change), `resize` and settings changes — no rAF loop, so an idle table costs no frames;
+at Low a repaint is one image draw, one scrim fill, `players` labels and up to `players` card
+rectangles at 1× pixel ratio. High/Ultra run a rAF loop only while the table or title is on screen
+and the tab is visible, with adaptive resolution guarding the frame time. Shipped payload excluding the unused
 three.js copies is well under 1 MB (150 KB key art, 76 KB eclipse, 44 KB plate, ~330 KB of Opus
 fetched lazily on first use of each event). The AI timer is 450 ms and `simPaused` stops it
 whenever the tab is hidden.
@@ -520,7 +560,12 @@ press. It fails on any `pageerror` or non-allowlisted `console.error`.
 
 ## 14. Testing and acceptance criteria
 
-**`npm test`** = `tests/rules-sanity.mjs` + `tests/lesson-check.mjs`, zero dependencies.
+**`npm test`** = `tests/rules-sanity.mjs` + `tests/lesson-check.mjs` + `node --test
+tests/gfx.test.mjs`, zero dependencies. *gfx* covers `detectPreset` on sample GPU strings
+(SwiftShader/llvmpipe → Low, GeForce/Apple M → High, Intel/Adreno → Balanced, mobile cap),
+`resolve` with preset / override / invalid tier / render-scale clamp, `choosePreset` clearing
+overrides, the adaptive step and pixel ratio, `describe`, and that every panel string exists in
+all nine locales.
 
 *rules-sanity* — for 2, 3 and 4 seats × 5 seeds: drives a full match by AI self-play, asserting
 that `aiChoose` always returns a command, that every command is legal, and that the match reaches
@@ -542,14 +587,18 @@ cards and the real Pass button → results overlay with a headline and one score
 Play again → pause → Leave to title → Daily and Journey sub-menus open and close → Practice
 (Hint toast, pass, Undo restores the pre-pass state, re-pass, play) → Learn lesson 1 applies its
 fixture, completes on the forced play, persists progress, and Next lesson starts lesson 2 →
-assert zero page errors.
+Settings → Graphics: Low then High applied (`data-gfx-preset` on body and canvas, summary text),
+a Shadows override applied and saved, the panel fits the viewport width, reload restores preset
+and override, Ultra clears the override, frame-rate readout toggles, a Practice table renders at
+Ultra and at Low (Low at 1× backing store) → assert zero page errors and zero console
+errors/warnings.
 
 **QA bar** (from the product QA rules), as checkable statements:
 
 1. A new player is taught: Learn is the first mode card, lesson 1 is completable in one click,
    every Journey stage that adds a rule carries an intro line, and Help restates the loop. ✅
 2. Every implemented feature is reachable in the browser: all five modes, both assists, pause,
-   settings, help, and all four settings controls. ✅
+   settings, help, and every settings control including the Graphics section. ✅
 3. No console errors or warnings during a full playthrough at either viewport — asserted by e2e. ✅
 4. Text and UI are visible and not cut off at 1280×800 and 390×844: seat labels are clamped
    inside the canvas, the round line sits clear of the HUD and hand, list panels scroll rather
@@ -585,7 +634,8 @@ assert zero page errors.
 
 ## 16. Known limitations
 
-1. **No localization.** en-US strings are hard-coded in three places; the other eight required
+1. **No localization** outside the Graphics panel (which is localized in all nine locales from
+   `?lang=` / `navigator.languages`). Other en-US strings are hard-coded in three places; the other eight required
    locales are absent (§10). Some toasts show raw rule ids (`must-follow-suit`,
    `hearts-not-broken`) instead of sentences.
 2. **No server-authoritative records.** Identity, cloud save and token refresh are wired (§12),
@@ -606,7 +656,9 @@ assert zero page errors.
 7. **Per-level `mechanics.undo` / `mechanics.hint` are ignored.** Assists are gated by mode alone
    (`assistsOn`), so a Journey stage authored with `hint: true` shows no Hint button.
 8. **Undo is unbounded**: the snapshot stack grows for a whole session, each entry a full state.
-9. **`quality` (Low/Medium/High) persists but changes nothing** — no quality-dependent rendering.
+9. **Graphics effects are 2D canvas passes, not three.js.** Bloom is pre-blurred glow sprites on
+   light sources rather than a threshold pass, and there is no ambient occlusion or
+   anti-aliasing option (the 2D canvas is always anti-aliased).
 10. **Resign has no UI**, though the engine implements `{type:'resign'}` and its terminal reason.
 11. **Ties are shared wins.** Help text describes an objective / invalid-action / elapsed-time /
     session-id tie-break order that the engine does not implement — every seat at the minimum wins.
