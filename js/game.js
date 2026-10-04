@@ -43,6 +43,7 @@ function loadSettings() {
 function saveSettings() {
   writeLocalCache();
   cloudPush();
+  if (Platform) Platform.patchSettings(settings); // per-player settings KV mirror
 }
 var settings = loadSettings();
 
@@ -340,10 +341,33 @@ var HELP_TEXT = [
   '',
   'Lowest match score wins once anyone reaches the threshold; full-penalty capture applies the declared room rule.',
   '',
-  'Controls: click or tap a card to select or play it. In Practice and Learn, H asks for a hint and U undoes your last action. Escape or the pause button opens the pause menu.',
+  null, // controls line: built from the effective key bindings (controlsHelp)
   '',
   'Results show a component breakdown rather than one unexplained total. Ties use, in order: primary objective completion, fewer invalid actions, lower authoritative elapsed time, then stable session identifier.'
 ];
+
+// ---------- keyboard bindings (StarHermit controls; defaults mirror starhermit.txt) ----------
+var DEFAULT_BINDINGS = { hint: ['KeyH'], undo: ['KeyU'], pause: ['Escape'] };
+var bindings = JSON.parse(JSON.stringify(DEFAULT_BINDINGS));
+function keyName(code) {
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit\d$/.test(code)) return code.slice(5);
+  return code === 'Escape' ? 'Escape' : String(code).replace(/^Arrow/, '');
+}
+function keysFor(a) { return (bindings[a] || []).map(keyName).join('/'); }
+function actionFor(code) {
+  for (var a in bindings) if (bindings[a].indexOf(code) >= 0) return a;
+  return null;
+}
+function controlsHelp() {
+  return 'Controls: click or tap a card to select or play it. In Practice and Learn, ' + keysFor('hint') +
+    ' asks for a hint and ' + keysFor('undo') + ' undoes your last action. ' + keysFor('pause') +
+    ' or the pause button opens the pause menu.';
+}
+function renderHelp() {
+  var hp = document.querySelector('.help-panel');
+  if (hp) hp.innerHTML = HELP_TEXT.map(function (p) { return '<p>' + (p === null ? controlsHelp() : p) + '</p>'; }).join('');
+}
 
 // ---------- play / session state (populated by startPlay) ----------
 var S = null; // { mode, id, level }
@@ -1117,15 +1141,16 @@ document.addEventListener('click', function (e) {
   if (a === 'exit-learn') { playSfx('ui-back'); leaveToTitle(); navTo('learn'); }
 });
 window.addEventListener('keydown', function (e) {
-  if (e.key === 'Escape' && screenNow === 'play' && sess && sess.game && sess.game.phase !== 'done') {
+  var act = actionFor(e.code);
+  if (act === 'pause' && screenNow === 'play' && sess && sess.game && sess.game.phase !== 'done') {
     playSfx('pause');
     $('pause-overlay').classList.toggle('hidden');
     return;
   }
   if (screenNow !== 'play' || !sess || !sess.game || sess.game.phase === 'done' || sess.lessonDone) return;
   if (!$('pause-overlay').classList.contains('hidden')) return;
-  if (e.key === 'u' || e.key === 'U') doUndo();
-  if (e.key === 'h' || e.key === 'H') doHint();
+  if (act === 'undo') doUndo();
+  if (act === 'hint') doHint();
 });
 window.addEventListener('resize', function () { drawTable(); drawTitleFx(); refreshGfxSummary(); });
 document.addEventListener('visibilitychange', ensureLoop);
@@ -1138,8 +1163,7 @@ if (rmChk) { rmChk.checked = settings.reducedMotion; rmChk.addEventListener('cha
 var ltChk = $('set-large-text');
 if (ltChk) { ltChk.checked = settings.largeText; ltChk.addEventListener('change', function () { settings.largeText = ltChk.checked; saveSettings(); document.body.classList.toggle('large-text', ltChk.checked); }); }
 if (settings.largeText) document.body.classList.add('large-text');
-var helpPanel = document.querySelector('.help-panel');
-if (helpPanel) helpPanel.innerHTML = HELP_TEXT.map(function (p) { return '<p>' + p + '</p>'; }).join('');
+renderHelp();
 
 // ---------- audio wiring for the existing UI ----------
 // Gesture unlock: browsers require a user gesture before AudioContext output.
@@ -1183,14 +1207,58 @@ if (musicSlider) {
 // The chip is the game's name/status slot: account nickname + sync state,
 // shown only when a launch token made us hosted. Remote doc wins on load.
 var SYNC_LABELS = { syncing: 'Syncing…', saving: 'Saving…', synced: 'Cloud synced', error: 'Cloud unreachable' };
+var wasHosted = false;
 function renderPlayerChip() {
-  if (!Platform || !Platform.isHosted()) return;
   var chip = $('player-chip');
+  var hosted = !!(Platform && Platform.isHosted());
+  if (wasHosted && !hosted) accountToast(gt('sh.signedOut'));
+  wasHosted = hosted;
+  var si = $('btn-signin'); if (si) si.classList.toggle('hidden', !(Platform && Platform.canSignIn()));
+  var inv = $('btn-invite'); if (inv) inv.classList.toggle('hidden', !hosted);
   if (!chip) return;
-  var name = Platform.nickname || ('Player ' + String(Platform.sub || '').slice(0, 8));
+  if (!hosted) { chip.classList.add('hidden'); return; }
+  var name = Platform.nickname || ('Player ' + String(Platform.sub || '').slice(0, 6));
   var label = SYNC_LABELS[Platform.sync];
-  chip.textContent = label ? name + ' \u00b7 ' + label : name;
+  chip.textContent = '';
+  if (Platform.avatar) {
+    var img = document.createElement('img');
+    img.className = 'player-avatar'; img.src = Platform.avatar; img.alt = '';
+    chip.appendChild(img);
+  }
+  chip.appendChild(document.createTextNode(label ? name + ' \u00b7 ' + label : name));
   chip.classList.remove('hidden');
+}
+function accountToast(msg) {
+  var el = $('account-toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  clearTimeout(accountToast._h);
+  accountToast._h = setTimeout(function () { el.classList.add('hidden'); }, 3500);
+}
+(function () {
+  var si = $('btn-signin');
+  if (si) { si.textContent = gt('sh.signIn'); si.addEventListener('click', function () { playSfx('ui-click'); Platform.signIn(); }); }
+  var inv = $('btn-invite');
+  if (inv) {
+    inv.textContent = gt('sh.invite');
+    inv.addEventListener('click', function () {
+      playSfx('ui-click');
+      Platform.copyInvite().then(function (ok) {
+        accountToast(ok ? gt('sh.copied') : gt('sh.copyFailed', { link: Platform.inviteLink() || '' }));
+      });
+    });
+  }
+})();
+function adoptSettings(s) {
+  if (!s || typeof s !== 'object') return false;
+  var applied = false;
+  if (typeof s.music === 'number') { settings.music = s.music; applied = true; }
+  if (typeof s.sfx === 'number') { settings.sfx = s.sfx; applied = true; }
+  if (s.gfx && typeof s.gfx === 'object') { settings.gfx = cleanGfx(s.gfx); applied = true; }
+  if (typeof s.reducedMotion === 'boolean') { settings.reducedMotion = s.reducedMotion; applied = true; }
+  if (typeof s.largeText === 'boolean') { settings.largeText = s.largeText; applied = true; }
+  return applied;
 }
 function applySettingsToUI() {
   var sl = $('set-sfx'); if (sl) sl.value = settings.sfx;
@@ -1208,16 +1276,7 @@ function applySettingsToUI() {
 }
 function adoptRemoteDoc(doc) {
   if (!doc || typeof doc !== 'object') return;
-  var applied = false;
-  var s = doc.settings;
-  if (s && typeof s === 'object') {
-    if (typeof s.music === 'number') settings.music = s.music;
-    if (typeof s.sfx === 'number') settings.sfx = s.sfx;
-    if (s.gfx && typeof s.gfx === 'object') settings.gfx = cleanGfx(s.gfx);
-    if (typeof s.reducedMotion === 'boolean') settings.reducedMotion = s.reducedMotion;
-    if (typeof s.largeText === 'boolean') settings.largeText = s.largeText;
-    applied = true;
-  }
+  var applied = adoptSettings(doc.settings);
   var q = doc.progress;
   if (q && typeof q === 'object') {
     ['learn', 'journey', 'challenge', 'daily'].forEach(function (k) {
@@ -1239,6 +1298,13 @@ if (Platform) {
   Platform.onStatus(renderPlayerChip);
   Platform.init();
   renderPlayerChip();
+  Platform.loadBindings(DEFAULT_BINDINGS).then(function (b) { bindings = b; renderHelp(); });
+  if (Platform.isHosted()) {
+    // Settings KV wins over the local cache when signed in.
+    Platform.getSettings().then(function (s) {
+      if (adoptSettings(s)) { writeLocalCache(); applySettingsToUI(); }
+    });
+  }
 }
 
 window.HFGame = {

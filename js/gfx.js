@@ -99,6 +99,7 @@ var LOCALES = ['en-US', 'en-GB', 'es-419', 'es-ES', 'de-DE', 'fr-FR', 'fr-CA', '
 
 var S = {
   'en-US': {
+    'sh.signIn': "Sign in with StarHermit", 'sh.invite': "Invite a friend", 'sh.copied': "Invite link copied to clipboard.", 'sh.copyFailed': "Could not copy the invite link: {link}", 'sh.signedOut': "Signed out of StarHermit. Progress keeps saving on this device.",
     graphics: 'Graphics', quality: 'Quality', auto: 'Auto (detected: {tier})',
     low: 'Low', balanced: 'Balanced', high: 'High', ultra: 'Ultra',
     renderScale: 'Render scale', fromPreset: 'From preset ({tier})',
@@ -116,9 +117,11 @@ var S = {
     fps: '{n} fps', fpsStatic: 'still'
   },
   'en-GB': {
+    'sh.signIn': "Sign in with StarHermit", 'sh.invite': "Invite a friend", 'sh.copied': "Invite link copied to clipboard.", 'sh.copyFailed': "Could not copy the invite link: {link}", 'sh.signedOut': "Signed out of StarHermit. Progress keeps saving on this device.",
     'cat.grade': 'Colour grade & vignette'
   },
   'es-419': {
+    'sh.signIn': "Iniciar sesión con StarHermit", 'sh.invite': "Invitar a un amigo", 'sh.copied': "Enlace de invitación copiado al portapapeles.", 'sh.copyFailed': "No se pudo copiar el enlace de invitación: {link}", 'sh.signedOut': "Sesión de StarHermit cerrada. El progreso se sigue guardando en este dispositivo.",
     graphics: 'Gráficos', quality: 'Calidad', auto: 'Automática (detectada: {tier})',
     low: 'Baja', balanced: 'Equilibrada', high: 'Alta', ultra: 'Ultra',
     renderScale: 'Escala de renderizado', fromPreset: 'Del ajuste ({tier})',
@@ -136,9 +139,11 @@ var S = {
     fps: '{n} fps', fpsStatic: 'quieto'
   },
   'es-ES': {
+    'sh.signIn': "Iniciar sesión con StarHermit", 'sh.invite': "Invitar a un amigo", 'sh.copied': "Enlace de invitación copiado al portapapeles.", 'sh.copyFailed': "No se ha podido copiar el enlace de invitación: {link}", 'sh.signedOut': "Se ha cerrado la sesión de StarHermit. El progreso se sigue guardando en este dispositivo.",
     'cat.detail': 'Detalle de las cartas', showFps: 'Mostrar imágenes por segundo'
   },
   'de-DE': {
+    'sh.signIn': "Mit StarHermit anmelden", 'sh.invite': "Freund einladen", 'sh.copied': "Einladungslink in die Zwischenablage kopiert.", 'sh.copyFailed': "Einladungslink konnte nicht kopiert werden: {link}", 'sh.signedOut': "Von StarHermit abgemeldet. Der Fortschritt wird weiter auf diesem Gerät gespeichert.",
     graphics: 'Grafik', quality: 'Qualität', auto: 'Automatisch (erkannt: {tier})',
     low: 'Niedrig', balanced: 'Ausgewogen', high: 'Hoch', ultra: 'Ultra',
     renderScale: 'Renderskalierung', fromPreset: 'Aus Voreinstellung ({tier})',
@@ -156,6 +161,7 @@ var S = {
     fps: '{n} fps', fpsStatic: 'ruhig'
   },
   'fr-FR': {
+    'sh.signIn': "Se connecter avec StarHermit", 'sh.invite': "Inviter un ami", 'sh.copied': "Lien d’invitation copié dans le presse-papiers.", 'sh.copyFailed': "Impossible de copier le lien d’invitation : {link}", 'sh.signedOut': "Déconnecté de StarHermit. La progression reste enregistrée sur cet appareil.",
     graphics: 'Graphismes', quality: 'Qualité', auto: 'Auto (détectée : {tier})',
     low: 'Basse', balanced: 'Équilibrée', high: 'Haute', ultra: 'Ultra',
     renderScale: 'Échelle de rendu', fromPreset: 'Selon le préréglage ({tier})',
@@ -173,9 +179,11 @@ var S = {
     fps: '{n} i/s', fpsStatic: 'immobile'
   },
   'fr-CA': {
+    'sh.signIn': "Se connecter avec StarHermit", 'sh.invite': "Inviter un ami", 'sh.copied': "Lien d’invitation copié dans le presse-papiers.", 'sh.copyFailed': "Impossible de copier le lien d’invitation : {link}", 'sh.signedOut': "Déconnecté de StarHermit. La progression reste enregistrée sur cet appareil.",
     'cat.detail': 'Détail des cartes à jouer'
   },
   'pt-BR': {
+    'sh.signIn': "Entrar com StarHermit", 'sh.invite': "Convidar um amigo", 'sh.copied': "Link de convite copiado para a área de transferência.", 'sh.copyFailed': "Não foi possível copiar o link de convite: {link}", 'sh.signedOut': "Você saiu do StarHermit. O progresso continua salvo neste dispositivo.",
     graphics: 'Gráficos', quality: 'Qualidade', auto: 'Automática (detectada: {tier})',
     low: 'Baixa', balanced: 'Equilibrada', high: 'Alta', ultra: 'Ultra',
     renderScale: 'Escala de renderização', fromPreset: 'Da predefinição ({tier})',
@@ -193,6 +201,7 @@ var S = {
     fps: '{n} fps', fpsStatic: 'parado'
   },
   'it-IT': {
+    'sh.signIn': "Accedi con StarHermit", 'sh.invite': "Invita un amico", 'sh.copied': "Link di invito copiato negli appunti.", 'sh.copyFailed': "Impossibile copiare il link di invito: {link}", 'sh.signedOut': "Disconnesso da StarHermit. I progressi restano salvati su questo dispositivo.",
     graphics: 'Grafica', quality: 'Qualità', auto: 'Automatica (rilevata: {tier})',
     low: 'Bassa', balanced: 'Bilanciata', high: 'Alta', ultra: 'Ultra',
     renderScale: 'Scala di rendering', fromPreset: 'Dal preset ({tier})',

@@ -6,3 +6,6 @@ server=server.js
 version=1.0.0
 contentVersion=1
 cover=cover.jpg
+control.hint=KeyH | Hint
+control.undo=KeyU | Undo
+control.pause=Escape | Pause

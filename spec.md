@@ -31,7 +31,8 @@ burns out — unless you can take *every* penalty and turn the night inside out.
 | `js/rng.js` | `HFRNG`: mulberry32 PRNG, FNV-1a `hashString`, three derived streams (rules / decor / av) |
 | `js/rules.js` | `HFRules`: the whole rules contract — deck, deal, pass, legality, trick resolution, scoring, terminal states, AI, hints, serialization |
 | `js/content.js` | `HFContent`: themes, 40 Journey stages, 6 Challenges, 3 Practice presets, the daily generator, 6 Learn lessons, achievement definitions |
-| `js/platform.js` | `HFPlatform`: StarHermit adapter — launch-token read/strip, Bearer + 45-min refresh, profile nickname, cloud-save mirror (stored zip + base64), sync status; inert without a token |
+| `starhermit-sdk.js` | Shared StarHermit client (`window.StarHermit`), an unmodified copy of `tools/starhermit-sdk.js` |
+| `js/platform.js` | `HFPlatform`: StarHermit adapter over the SDK — sign-in, nickname/avatar, cloud save, settings KV, key bindings, invite link, sync status; inert without a token |
 | `js/gfx.js` | `HFGfx`: pure graphics quality model — presets, categories, `detectPreset`, `resolve`, `choosePreset`, `presetTier`, `describe`, `adaptStep`, `pixelRatio`, and the Graphics panel strings in all nine locales |
 | `js/tablefx.js` | `HFTableFx`: 2D canvas effect passes — GPU probe, lamp pool, moonlight wash, glow sprites (bloom), fireflies, vignette, detailed card faces, seat-label pills |
 | `js/game.js` | `HFGame`: DOM wiring, screen navigation, session loop, AI pump, audio, canvas painting, graphics application + animation loop + Graphics panel, results, local achievements, platform chip/adoption |
@@ -40,9 +41,9 @@ burns out — unless you can take *every* penalty and turn the night inside out.
 | `sfx/` | 20 Opus clips + `manifest.txt` (canonical, code-bound) + `manifest.md`/`manifest.json` (generation prompts) |
 | `assets/` | `keyart.webp`, `table.webp`, `eclipse.webp` |
 | `coverart.png` | 1200×675 store cover |
-| `tests/rules-sanity.mjs`, `tests/lesson-check.mjs`, `tests/gfx.test.mjs` | `npm test` (the last under `node --test`) |
+| `tests/rules-sanity.mjs`, `tests/lesson-check.mjs`, `tests/gfx.test.mjs`, `tests/platform.test.mjs` | `npm test` (the last two under `node --test`) |
 | `tests/e2e.mjs` | Playwright playthrough of the real UI at desktop and mobile |
-| `starhermit.txt` | Platform manifest: name, launch, owner, server, version, contentVersion, cover |
+| `starhermit.txt` | Platform manifest: name, launch, owner, server, version, contentVersion, cover, `control.*` key bindings |
 
 ---
 
@@ -494,17 +495,28 @@ Conventions: https://wiki.starhermit.com/
 ships a real `server.js` (a hardened static host: path-normalised, rejects escapes above the
 root and any dotfile segment, `PORT` from the environment).
 
-**Hosted identity + cloud save (js/platform.js).** On-platform, the launch token arrives in the
-URL fragment `#game_token=<jwt>`, is read once and stripped (`history.replaceState`); the JWT
-payload (base64url decode, no verify) supplies `sub` and `game_scope` (the slug — never
-hard-coded). Every REST call sends `Authorization: Bearer`, and the scoped token is re-minted
-every 45 min via `POST /api/v1/games/{slug}/launch-token` (60 s retry on failure). The player
-name comes from `GET /api/v1/users/{sub}/profile` (never `/api/v1/me`, never usernames; fallback
-`Player ` + id.slice(0,8)) and is shown with the sync state in a chip on the title screen.
-Progress is mirrored to the single cloud-save slot `GET`/`PUT /api/v1/me/cloud-saves/{slug}` as
-a stored zip with a base64 body; the remote copy wins on load, saves are debounced 2 s and
-flushed on `pagehide`/`visibilitychange`, and `hf-settings-v1`/`hf-progress-v1` remain the
-offline cache. Without a token none of this runs and no network is touched.
+**Hosted identity + cloud save (js/platform.js over starhermit-sdk.js).** `starhermit-sdk.js`
+loads before the game scripts; `HFPlatform.init()` calls `StarHermit.init()`, which reads the launch
+token from `#game_token=` (or the `#access_token=` sign-in return) and strips it. The slug comes
+from the token's `game_scope`, never hard-coded; the SDK renews the token before expiry, and if
+renewal is refused the chip and Invite button disappear, a toast says the player is signed out,
+and play continues locally. Signed in, the game:
+
+- shows a chip on the title screen with the avatar, the profile nickname (fallback `Player ` +
+  id prefix) and the sync state;
+- loads the cloud-save slot `game:<slug>` remote-first and adopts it (settings + progress), then
+  mirrors every settings/progress change with a 2 s debounce and a keepalive flush on
+  `pagehide`/hidden; `hf-settings-v1`/`hf-progress-v1` stay the offline cache;
+- mirrors the settings object (`music`, `sfx`, `gfx`, `reducedMotion`, `largeText`) to the
+  per-game settings KV on every change and applies the KV values over the local ones on start;
+- resolves the `control.hint` (H), `control.undo` (U) and `control.pause` (Escape) bindings via
+  `StarHermit.loadBindings`, routes `keydown` by `event.code`, and names the effective keys in Help;
+- offers **Invite a friend** on the title screen, copying `StarHermit.inviteLink()` with a
+  confirmation toast.
+
+Served from `<id>.starhermit.com` without a token, the title shows **Sign in with StarHermit**.
+The account strings (sign-in, invite, toasts) are localized in all nine locales in `js/gfx.js`
+(`sh.*` keys). Without a token none of this runs and no network is touched.
 
 **Shaped for it.** The pieces a platform integration needs already exist and are deliberately
 platform-shaped: stable content ids (`j01`…`j40`, `c1`…`c6`, `daily-YYYY-MM-DD`),
@@ -514,7 +526,9 @@ path), a per-table `parScore`, a fully deterministic engine plus `hashState` and
 `validateCommandShape` for server-side verification of a submitted command log, and a Daily
 whose ruleset is derived from the UTC date alone so every player's table is identical without a
 server telling them so. Leaderboards are read-only by contract (clients can never submit); the
-game shows local records only and makes no leaderboard calls. Presence/sessions remain unwired.
+game shows local records only and makes no leaderboard calls. `server.js` is a static host, not a
+platform script, so sessions, matchmaking, session invites, chat, replays and platform
+achievements/leaderboards have nothing to drive them and stay unwired.
 
 ---
 
@@ -524,7 +538,7 @@ game shows local records only and makes no leaderboard calls. Presence/sessions 
 globals so the same files run under Node in tests: `rng.js` (`HFRNG`) knows nothing about cards;
 `rules.js` (`HFRules`) knows nothing about the DOM, time or rendering and never calls
 `Math.random`; `content.js` (`HFContent`) is data plus pure expanders; `platform.js`
-(`HFPlatform`) owns the StarHermit adapter — launch token, profile nickname, cloud-save mirror —
+(`HFPlatform`) owns the StarHermit adapter over `starhermit-sdk.js` — token, profile, cloud save, settings KV, bindings, invite —
 and is inert without a token; `game.js` (`HFGame`) owns everything else impure — DOM, audio,
 canvas, `localStorage`, `setTimeout`.
 
@@ -565,7 +579,9 @@ tests/gfx.test.mjs`, zero dependencies. *gfx* covers `detectPreset` on sample GP
 (SwiftShader/llvmpipe → Low, GeForce/Apple M → High, Intel/Adreno → Balanced, mobile cap),
 `resolve` with preset / override / invalid tier / render-scale clamp, `choosePreset` clearing
 overrides, the adaptive step and pixel ratio, `describe`, and that every panel string exists in
-all nine locales.
+all nine locales. *platform* loads the SDK and `js/platform.js` against a stubbed fetch: token
+read and stripped, nickname, cloud-save path `game:<slug>` round-trip, settings PATCH, bindings,
+invite link, and zero fetches standalone.
 
 *rules-sanity* — for 2, 3 and 4 seats × 5 seeds: drives a full match by AI self-play, asserting
 that `aiChoose` always returns a command, that every command is legal, and that the match reaches
@@ -590,7 +606,9 @@ fixture, completes on the forced play, persists progress, and Next lesson starts
 Settings → Graphics: Low then High applied (`data-gfx-preset` on body and canvas, summary text),
 a Shadows override applied and saved, the panel fits the viewport width, reload restores preset
 and override, Ultra clears the override, frame-rate readout toggles, a Practice table renders at
-Ultra and at Low (Low at 1× backing store) → assert zero page errors and zero console
+Ultra and at Low (Low at 1× backing store) → StarHermit: standalone makes no `/api/v1` request and
+shows no account UI; a `#game_token=` launch against a stubbed API shows the nickname chip, strips
+the token, loads `game:<slug>`, and clicking Invite a friend shows an on-screen toast → assert zero page errors and zero console
 errors/warnings.
 
 **QA bar** (from the product QA rules), as checkable statements:

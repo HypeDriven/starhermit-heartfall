@@ -143,3 +143,7 @@ body.gfx-bloom .scores .score.turn { text-shadow:0 0 10px rgba(247,201,72,.65); 
 #fps-readout { position:fixed; left:8px; bottom:6px; z-index:5; pointer-events:none; font:12px/1.2 ui-monospace,monospace;
   color:#cfe0ff; background:rgba(8,12,24,.6); padding:2px 6px; }
 body[data-screen="play"] #fps-readout { bottom:auto; top:30px; }
+/* StarHermit account row (sign-in / invite) and its confirmation toast */
+.account-row { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; margin-top:12px; }
+.player-avatar { width:22px; height:22px; border-radius:50%; vertical-align:middle; margin-right:8px; object-fit:cover; }
+.account-toast { position:fixed; left:50%; bottom:max(16px, env(safe-area-inset-bottom)); transform:translateX(-50%); z-index:50; max-width:calc(100vw - 32px); background:#3a2f5e; color:#fff; padding:8px 18px; border-radius:10px; text-align:center; overflow-wrap:anywhere; }

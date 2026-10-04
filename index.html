@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Heartfall</title>
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="stylesheet" href="/css/style.css">
@@ -22,6 +22,11 @@
       <h1 class="game-title">HEARTFALL</h1>
       <p class="tagline">A moonlit conservatory card table.</p>
       <p id="player-chip" class="player-chip hidden" aria-live="polite"></p>
+      <div class="account-row">
+        <button id="btn-signin" class="hidden" type="button">Sign in with StarHermit</button>
+        <button id="btn-invite" class="hidden" type="button">Invite a friend</button>
+      </div>
+      <p id="account-toast" class="account-toast hidden" role="status" aria-live="polite"></p>
       <nav class="menu" aria-label="Main menu">
         <button id="btn-play" class="primary big">Play</button>
         <div class="subrow">
@@ -158,6 +163,7 @@
 
 </div>
 <p id="fps-readout" class="hidden" aria-hidden="true"></p>
+<script src="/starhermit-sdk.js"></script>
 <script src="/js/rng.js"></script>
 <script src="/js/rules.js"></script>
 <script src="/js/content.js"></script>
