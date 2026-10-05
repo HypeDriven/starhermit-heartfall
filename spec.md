@@ -311,6 +311,11 @@ letterboxed, under a `rgba(9,14,26,0.38)` scrim. Seat labels are clamped inside 
 `measureText` inset and the round line sits top-left, clear of the HUD and the hand.
 **Desktop and landscape** use the same layout with 74×98 px cards. The two things that must never
 be cut off are your hand and the objective line; e2e screenshots both at 1280×800 and 390×844.
+**Large screens:** `ui-scale.js` sets `--ui-scale` on `<html>` (1 up to a 1600×1000 viewport, then the
+smaller of width/1600 and height/1000, capped at 2.5). The list/settings/help screens, the title menu block,
+the play HUD, pause button, toast and pause/results overlays are CSS-`zoom`ed by it (their vh/vw lengths
+divided by it); the full-viewport table and title canvases are not zoomed but draw in a space shrunk by
+`UIScale.value`, so seat labels, trick cards and effects grow with the HUD while the backing store stays sharp.
 
 ---
 

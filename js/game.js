@@ -604,6 +604,10 @@ function effectsOn() { return !fxFailed; }
 
 // Size a canvas's backing store to its CSS box × the graphics pixel ratio;
 // returns the 2D context with a CSS-pixel transform, or null when not laid out.
+// On large screens (UIScale > 1) the drawing space shrinks by the UI scale so
+// labels, cards and effects grow with the zoomed DOM HUD; the backing store
+// still follows the CSS box, so the canvas stays sharp.
+function uiScale() { return (window.UIScale && window.UIScale.value) || 1; }
 function fitCanvas(cv) {
   var cw = cv.clientWidth, ch = cv.clientHeight;
   if (!cw || !ch) return null;
@@ -611,8 +615,9 @@ function fitCanvas(cv) {
   var bw = Math.max(1, Math.round(cw * ratio)), bh = Math.max(1, Math.round(ch * ratio));
   if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
   var ctx = cv.getContext('2d');
-  ctx.setTransform(bw / cw, 0, 0, bh / ch, 0, 0);
-  return { ctx: ctx, w: cw, h: ch, bw: bw, bh: bh };
+  var k = uiScale(), w = cw / k, h = ch / k;
+  ctx.setTransform(bw / w, 0, 0, bh / h, 0, 0);
+  return { ctx: ctx, w: w, h: h, bw: bw, bh: bh, k: k };
 }
 
 // The painted plate + scrim, graded (contrast/saturation) when the grade is on.
@@ -693,7 +698,8 @@ function drawTable(tNow) {
     if (!el || el.classList.contains('hidden')) return null;
     var r = el.getBoundingClientRect();
     if (!r.width || !r.height) return null;
-    return { l: r.left - cvRect.left, t: r.top - cvRect.top, r: r.right - cvRect.left, b: r.bottom - cvRect.top };
+    var k = fit.k;   // rects are viewport px; the drawing space is viewport px / UI scale
+    return { l: (r.left - cvRect.left) / k, t: (r.top - cvRect.top) / k, r: (r.right - cvRect.left) / k, b: (r.bottom - cvRect.top) / k };
   };
   var topBand = hudRect('hud-top'), bottomBand = hudRect('hud-bottom');
   var pad = Rx.detail === 'detailed' ? 15 : 6;   // room for the label pill
