@@ -510,7 +510,8 @@ and play continues locally. Signed in, the game:
 - shows a chip on the title screen with the avatar, the profile nickname (fallback `Player ` +
   id prefix) and the sync state;
 - loads the cloud-save slot `game:<slug>` remote-first and adopts it (settings + progress), then
-  mirrors every settings/progress change with a 2 s debounce and a keepalive flush on
+  mirrors every settings/progress change (nothing is uploaded while that load runs; a change made
+  meanwhile is dropped if a remote doc was adopted, else pushed after it) with a 2 s debounce and a keepalive flush on
   `pagehide`/hidden; `hf-settings-v1`/`hf-progress-v1` stay the offline cache;
 - mirrors the settings object (`music`, `sfx`, `gfx`, `reducedMotion`, `largeText`) to the
   per-game settings KV on every change and applies the KV values over the local ones on start;

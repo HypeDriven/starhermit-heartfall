@@ -51,9 +51,14 @@
     });
     SH.profile().then(function (p) { P.nickname = p ? p.displayName : null; emitStatus(); });
     SH.avatarUrl().then(function (url) { if (url) { P.avatar = url; emitStatus(); } });
+    P._loading = true;
     SH.loadJSON().then(function (doc) {
+      P._loading = false;
+      var held = P._held; P._held = null;
       if (doc && P._remoteCb) { try { P._remoteCb(doc); } catch (_) {} }
       setSync('synced');
+      // A doc held during the load is stale once the remote one is adopted.
+      if (held && !doc) P.push(held);
     });
     emitStatus();
     return true;
@@ -62,8 +67,11 @@
   P.onRemote = function (cb) { P._remoteCb = cb; };
   P.onStatus = function (cb) { P._statusCbs.push(cb); };
   // Queue the latest doc; localStorage was already written by the caller.
+  // Held while the start-up load runs: a doc queued then would still be PUT
+  // after the remote one is adopted, over the newer cloud save.
   P.push = function (doc) {
     if (!P.hosted) return;
+    if (P._loading) { P._held = doc; return; }
     setSync('saving');
     SH.saveJSON(doc);
   };
