@@ -37,7 +37,8 @@ burns out — unless you can take *every* penalty and turn the night inside out.
 | `js/tablefx.js` | `HFTableFx`: 2D canvas effect passes — GPU probe, lamp pool, moonlight wash, glow sprites (bloom), fireflies, vignette, detailed card faces, seat-label pills |
 | `js/game.js` | `HFGame`: DOM wiring, screen navigation, session loop, AI pump, audio, canvas painting, graphics application + animation loop + Graphics panel, results, local achievements, platform chip/adoption |
 | `js/three.min.js`, `vendor/three.module.min.js` | three.js r160 (MIT). Loaded but not used for rendering — see Known limitations |
-| `server.js` | Static file server (`PORT`, default 8000), path-traversal and dotfile guarded |
+| `score-script.js` | StarHermit platform script (`server=score-script.js`): range-checks a finished match's winning margin sent through `StarHermit.submitScores` and posts it to the `margin` leaderboard (canonical copy in the games repo's `tools/score-script.js`) |
+| `server.js` | Local dev static file server (`PORT`, default 8000), path-traversal and dotfile guarded |
 | `sfx/` | 20 Opus clips + `manifest.txt` (canonical, code-bound) + `manifest.md`/`manifest.json` (generation prompts) |
 | `assets/` | `keyart.webp`, `table.webp`, `eclipse.webp` |
 | `coverart.png` | 1200×675 store cover |
@@ -496,9 +497,11 @@ See **Design intent not yet implemented**.
 Conventions: https://wiki.starhermit.com/
 
 **Used.** The platform manifest `starhermit.txt` declares `name=Heartfall`, `launch=index.html`,
-`owner`, `server=server.js`, `version=1.0.0`, `contentVersion=1`, `cover=coverart.png`. The game
-ships a real `server.js` (a hardened static host: path-normalised, rejects escapes above the
-root and any dotfile segment, `PORT` from the environment).
+`owner`, `server=score-script.js`, `version=1.0.0`, `contentVersion=1`, `cover=coverart.png`.
+`score-script.js` is the platform script: a practice session that accepts `{type:'result', scores}`,
+range-checks each score against its board and posts it. `server.js` is the local dev server (a
+hardened static host: path-normalised, rejects escapes above the root and any dotfile segment,
+`PORT` from the environment).
 
 **Hosted identity + cloud save (js/platform.js over starhermit-sdk.js).** `starhermit-sdk.js`
 loads before the game scripts; `HFPlatform.init()` calls `StarHermit.init()`, which reads the launch
@@ -518,11 +521,16 @@ and play continues locally. Signed in, the game:
 - resolves the `control.hint` (H), `control.undo` (U) and `control.pause` (Escape) bindings via
   `StarHermit.loadBindings`, routes `keydown` by `event.code`, and names the effective keys in Help;
 - offers **Invite a friend** on the title screen, copying `StarHermit.inviteLink()` with a
-  confirmation toast.
+  confirmation toast;
+- posts every finished Journey, Daily or Challenge match to the `margin` leaderboard ("Winning
+  margin": integer, higher is better, −500…500 — the lowest opponent total minus the player's
+  total, negative when behind) through `HFPlatform.submitScore` → `StarHermit.submitScores`, and
+  the results overlay shows "Leaderboard rank: #N" (or "Score posted / not posted to the
+  leaderboard."). Practice and Learn post nothing.
 
 Served from `<id>.starhermit.com` without a token, the title shows **Sign in with StarHermit**.
-The account strings (sign-in, invite, toasts) are localized in all nine locales in `js/gfx.js`
-(`sh.*` keys). Without a token none of this runs and no network is touched.
+The account and leaderboard strings (sign-in, invite, toasts, results rank line) are localized
+in all nine locales in `js/gfx.js` (`sh.*`, `lb.*` keys). Without a token none of this runs and no network is touched.
 
 **Shaped for it.** The pieces a platform integration needs already exist and are deliberately
 platform-shaped: stable content ids (`j01`…`j40`, `c1`…`c6`, `daily-YYYY-MM-DD`),
@@ -531,10 +539,9 @@ locally and mirrored in the cloud doc — a pure browser game has no server-auth
 path), a per-table `parScore`, a fully deterministic engine plus `hashState` and
 `validateCommandShape` for server-side verification of a submitted command log, and a Daily
 whose ruleset is derived from the UTC date alone so every player's table is identical without a
-server telling them so. Leaderboards are read-only by contract (clients can never submit); the
-game shows local records only and makes no leaderboard calls. `server.js` is a static host, not a
-platform script, so sessions, matchmaking, session invites, chat, replays and platform
-achievements/leaderboards have nothing to drive them and stay unwired.
+server telling them so. The margin board takes the client's reported margin (range-checked only;
+no replay verification). Multiplayer sessions, matchmaking, session invites, chat, replays and
+platform achievements stay unwired.
 
 ---
 
@@ -663,8 +670,8 @@ errors/warnings.
    locales are absent (§10). Some toasts show raw rule ids (`must-follow-suit`,
    `hearts-not-broken`) instead of sentences.
 2. **No server-authoritative records.** Identity, cloud save and token refresh are wired (§12),
-   but presence/sessions are unwired and there is no leaderboard submission (clients can never
-   submit) and no server-validated achievement unlock — achievements are local flags inside the
+   but presence/sessions are unwired, the margin leaderboard is not replay-verified, and there is
+   no server-validated achievement unlock — achievements are local flags inside the
    cloud-saved progress doc, awarded at match end, with no screen listing them.
 3. **three.js is loaded but unused.** `index.html` imports `js/three.min.js` (670 KB) and sets
    `window.THREE`; `js/game.js` reads it and `window.HFRender`, which no file defines, so `Render`
@@ -699,8 +706,8 @@ errors/warnings.
   open a session per match and close it with the final score, and submit Daily results to a
   per-date leaderboard keyed on `daily-YYYY-MM-DD`. `server.js` grows a verification endpoint
   that replays a submitted command log through `js/rules.js` and compares `hashState`, so a
-  Daily leaderboard entry can be trusted. (Identity, cloud save, token refresh and local
-  achievements shipped in §12; clients still can never submit to a leaderboard directly.)
+  Daily leaderboard entry can be trusted. (Identity, cloud save, token refresh, local
+  achievements and the unverified margin board shipped in §12.)
 * **Theme application**: bind the level's `theme` palette to the canvas paint and to CSS custom
   properties, and gate the four unlockable themes on the `unlockStars` totals already authored.
 * **Per-level assists**: honour `mechanics.undo` / `mechanics.hint` from the level config instead

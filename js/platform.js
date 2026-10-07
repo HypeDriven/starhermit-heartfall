@@ -85,6 +85,19 @@
   P.loadBindings = function (defaults) {
     return P.hosted ? SH.loadBindings(defaults) : Promise.resolve(JSON.parse(JSON.stringify(defaults)));
   };
+  // Post a finished match to a leaderboard (score-script.js); resolves
+  // { posted, rank } — rank on that board, or null. Offline: no call.
+  P.submitScore = function (key, value) {
+    if (!P.hosted) return Promise.resolve({ posted: false, rank: null });
+    var scores = {}; scores[key] = value;
+    return SH.submitScores(scores).then(function (keys) {
+      if (keys.indexOf(key) < 0) return { posted: false, rank: null };
+      return SH.leaderboard(key, { pageSize: 100 }).then(function (r) {
+        var me = (r.items || []).filter(function (i) { return i.userId === SH.userId; })[0];
+        return { posted: true, rank: me ? me.rank : null };
+      }, function () { return { posted: true, rank: null }; });
+    }, function () { return { posted: false, rank: null }; });
+  };
   P.inviteLink = function () { return P.hosted ? SH.inviteLink() : null; };
   P.copyInvite = function () {
     var link = P.inviteLink();

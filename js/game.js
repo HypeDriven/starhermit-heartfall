@@ -1049,10 +1049,29 @@ function showResults() {
   }
   if (S.mode === 'daily') markDone('daily', S.level.date || S.id);
   awardAchievements(g);
-  ov.innerHTML = '<h2>' + head + '</h2><div class="panel">' + rows + goalLine + '</div>' +
+  ov.innerHTML = '<h2>' + head + '</h2><div class="panel">' + rows + goalLine +
+    '<p id="results-lb" class="goal-line hidden" aria-live="polite"></p></div>' +
     '<nav class="menu"><button data-act="again" class="primary big">Play again</button>' +
     '<button data-act="leave">Leave to title</button></nav>';
   ov.classList.remove('hidden');
+  postToLeaderboard(g);
+}
+
+// Signed in: Journey, Daily and Challenge matches post the winning margin
+// (lowest opponent total minus yours; negative when behind) to the platform
+// board and show the rank. Offline and Practice/Learn post nothing.
+function postToLeaderboard(g) {
+  var line = $('results-lb');
+  if (!line || !Platform || !Platform.isHosted()) return;
+  if (S.mode !== 'journey' && S.mode !== 'daily' && S.mode !== 'challenge') return;
+  var sc = g.terminal.scores, opp = Infinity;
+  for (var p = 1; p < sc.length; p++) opp = Math.min(opp, sc[p]);
+  line.textContent = gt('lb.posting');
+  line.classList.remove('hidden');
+  Platform.submitScore('margin', opp - sc[0]).then(function (r) {
+    line.textContent = !r.posted ? gt('lb.notPosted')
+      : r.rank ? gt('lb.rank', { rank: r.rank }) : gt('lb.posted');
+  });
 }
 
 function leaveToTitle() {

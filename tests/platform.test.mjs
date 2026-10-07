@@ -63,6 +63,7 @@ test('standalone: no token, no network', async () => {
   assert.deepEqual(plain(await P.getSettings()), {});
   assert.deepEqual(plain(await P.loadBindings({ hint: ['KeyH'] })), { hint: ['KeyH'] });
   assert.equal(P.inviteLink(), null);
+  assert.deepEqual(plain(await P.submitScore('margin', 12)), { posted: false, rank: null });
   await settle();
   assert.equal(fetched, 0);
 });
