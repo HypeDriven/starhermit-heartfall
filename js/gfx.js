@@ -41,7 +41,7 @@ function detectPreset(gpu, opts) {
   var mobile = !!(opts && opts.mobile);
   var tier;
   if (!g || /swiftshader|llvmpipe|softpipe|software|basic render|microsoft basic/.test(g)) tier = 'low';
-  else if (/nvidia|geforce|rtx|gtx|quadro|radeon rx|radeon pro|amd radeon(?! graphics)|apple m\d/.test(g)) tier = 'high';
+  else if (/nvidia|geforce|rtx|gtx|quadro|radeon rx|radeon pro|amd radeon(?!.*graphics)|apple m\d/.test(g)) tier = 'high';
   else tier = 'balanced';
   if (mobile && tier === 'high') tier = 'balanced';
   return tier;
