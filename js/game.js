@@ -138,14 +138,14 @@ function startMusic() {
     filter.connect(musicBus);
     var voices = [];
     [[110, 'sine', 0.20], [164.81, 'sine', 0.12], [220, 'triangle', 0.05]].forEach(function (v) {
-      var o = c.createOscillator(), g = c.createGain();
+      var o = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(c.createOscillator(), null) : c.createOscillator()), g = c.createGain();
       o.type = v[1]; o.frequency.value = v[0];
       g.gain.value = v[2];
       o.connect(g).connect(filter);
       o.start();
       voices.push(o);
     });
-    var lfo = c.createOscillator(), lfoGain = c.createGain();
+    var lfo = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(c.createOscillator(), null) : c.createOscillator()), lfoGain = c.createGain();
     lfo.type = 'sine'; lfo.frequency.value = 0.07;
     lfoGain.gain.value = 140;
     lfo.connect(lfoGain).connect(filter.frequency);
@@ -176,7 +176,7 @@ function beep(freq, dur, gain, type, delay) {
   try {
     var c = ensureCtx(); if (!c || !fxBus) return;
     var t = c.currentTime + (delay || 0);
-    var o = c.createOscillator(), g = c.createGain();
+    var o = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(c.createOscillator(), null) : c.createOscillator()), g = c.createGain();
     o.type = type || 'sine'; o.frequency.value = freq;
     g.gain.setValueAtTime(gain, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
@@ -193,7 +193,7 @@ function noiseBurst(dur, gain, freq, delay) {
     var buf = c.createBuffer(1, len, c.sampleRate);
     var d = buf.getChannelData(0);
     for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
-    var src = c.createBufferSource(); src.buffer = buf;
+    var src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(c.createBufferSource(), null) : c.createBufferSource()); src.buffer = buf;
     var f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq;
     var g = c.createGain(); g.gain.value = gain;
     src.connect(f).connect(g).connect(fxBus);
@@ -247,7 +247,7 @@ function playSample(name) {
   if (!entry || entry.state !== 'ready' || !entry.buffer) return false;
   var c = ensureCtx(); if (!c || !fxBus) return false;
   try {
-    var src = c.createBufferSource();
+    var src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(c.createBufferSource(), name) : c.createBufferSource());
     src.buffer = entry.buffer;
     src.connect(fxBus);
     src.start();
