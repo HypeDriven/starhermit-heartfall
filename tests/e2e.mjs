@@ -396,6 +396,53 @@ async function runPass(vpName, contextOptions) {
       if (!calls.some((c) => c.includes('/cloud-saves/game%3Agid-1'))) throw new Error('no cloud-save load: ' + calls.join(', '));
       await page.unroute(/\/api\/v1\//);
     });
+
+    await step(`${vpName}: Language — Automatic follows the account (fr-CA); Italian mid-match re-renders; ui.language; report`, async () => {
+      const calls = await stubStarHermit(page, { preferredLanguage: 'fr-CA' });
+      await page.goto('about:blank');
+      await page.goto(BASE + '/index.html#game_token=' + launchToken(), { waitUntil: 'load' });
+      await page.waitForFunction(() => document.documentElement.lang === 'fr-CA');
+      if ((await page.textContent('#btn-play')).trim() !== 'Jouer') throw new Error('title not in French');
+      await page.click('#btn-play');
+      await page.click('[data-mode="practice"]');
+      await page.click('#practice-list li >> nth=0');
+      await page.waitForSelector('#hand li');
+      await page.waitForFunction(() => /Passez|À vous|réfléchit/.test(document.getElementById('objective').textContent));
+      const handBefore = await page.locator('#hand li').count();
+      await page.click('#btn-pause');
+      await page.click('#pause-overlay [data-act="settings"]');
+      const choice = page.locator('[data-game-language="choice"]');
+      await choice.scrollIntoViewIfNeeded();
+      const auto = await choice.locator('option').first().textContent();
+      if (!/^Automatique — Français \(Canada\)$/.test(auto)) throw new Error('Automatic label not resolved: ' + auto);
+      await choice.selectOption('it-IT');
+      await page.waitForFunction(() => document.documentElement.lang === 'it-IT');
+      await page.waitForFunction(() => /Salvato/.test(document.querySelector('[data-game-language="status"]').textContent));
+      if (calls.settings['ui.language']?.choice !== 'it-IT') throw new Error('ui.language not saved: ' + JSON.stringify(calls.settings));
+      if ((await page.textContent('#screen-settings h2')) !== 'Impostazioni') throw new Error('settings heading not re-rendered');
+      if (!/Qualità/.test(await page.textContent('label[for="gfx-preset"]'))) throw new Error('graphics box not re-rendered');
+      if (!/Gioca|Tocca|Passa|pensando/.test(await page.textContent('#objective'))) throw new Error('match HUD not re-rendered: ' + await page.textContent('#objective'));
+      await page.locator('[data-game-report="title"]').scrollIntoViewIfNeeded();
+      await page.fill('[data-game-report="title"]', 'Test report');
+      await page.click('[data-game-report="send"]');
+      await page.waitForFunction(() => /Grazie/.test(document.querySelector('[data-game-report="status"]').textContent));
+      if (!calls.reports?.[0] || calls.reports[0].kind !== 'bug') throw new Error('report not posted');
+      await page.screenshot({ path: SHOT('language', vpName) });
+      if (vpName === 'mobile') {
+        await choice.selectOption('de-DE');
+        await page.waitForFunction(() => document.documentElement.lang === 'de-DE');
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+        if (overflow > 0) throw new Error('German settings overflow by ' + overflow + 'px');
+        await page.screenshot({ path: SHOT('language-de', vpName), fullPage: true });
+      }
+      await choice.selectOption('auto');
+      await page.waitForFunction(() => document.documentElement.lang === 'fr-CA');
+      await page.click('#screen-settings [data-nav="back"]');
+      await page.waitForSelector('#screen-play:not(.hidden)');
+      if (await page.locator('#hand li').count() !== handBefore) throw new Error('match reset by the language change');
+      if (!/Passez|À vous|réfléchit|Partie/.test(await page.textContent('#objective'))) throw new Error('objective not back in French');
+      await page.unroute(/\/api\/v1\//);
+    });
   } finally {
     await context.close();
   }

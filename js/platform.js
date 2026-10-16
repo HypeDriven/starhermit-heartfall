@@ -43,6 +43,13 @@
     adopt();
     SH.on('auth', function () { var was = P.hosted; adopt(); if (was !== P.hosted) emitStatus(); });
     SH.on('saved', function (ok) { setSync(ok ? 'synced' : 'error'); });
+    // A conditional write lost to a save from another device: reload the cloud
+    // doc and let the game merge it (game.js) and push the result again.
+    SH.on('saveconflict', function () {
+      SH.loadJSON().then(function (doc) {
+        if (doc && P._conflictCb) { try { P._conflictCb(doc); } catch (_) {} }
+      });
+    });
     if (!P.hosted) return false;
     P.sync = 'syncing';
     root.addEventListener('pagehide', function () { P.flush(); });
@@ -65,6 +72,7 @@
   };
 
   P.onRemote = function (cb) { P._remoteCb = cb; };
+  P.onConflict = function (cb) { P._conflictCb = cb; };
   P.onStatus = function (cb) { P._statusCbs.push(cb); };
   // Queue the latest doc; localStorage was already written by the caller.
   // Held while the start-up load runs: a doc queued then would still be PUT

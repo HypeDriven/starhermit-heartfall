@@ -8,6 +8,8 @@ var THREE = window.THREE;
 var Platform = window.HFPlatform || null; // StarHermit adapter; null-safe offline
 var Gfx = window.HFGfx;        // pure graphics quality model (js/gfx.js)
 var Fx = window.HFTableFx;     // canvas effect passes (js/tablefx.js)
+var I18N = window.HFI18N;      // localization (js/i18n.js); English source strings are keys
+var T = I18N.T, TH = I18N.TH;
 
 // Graphics settings object (see HFGfx.resolve); unknown keys are dropped.
 function cleanGfx(g) {
@@ -305,13 +307,13 @@ function liRow(ul, label, done) {
 function renderLearn() {
   var ul = $('learn-list'); ul.innerHTML = '';
   Content.tutorialLessons().forEach(function (l, i) {
-    liRow(ul, (i + 1) + '. ' + l.title, progress.learn[l.id]);
+    liRow(ul, (i + 1) + '. ' + T(l.title), progress.learn[l.id]);
   });
 }
 function renderJourney() {
   var ul = $('journey-list'); ul.innerHTML = '';
   Content.JOURNEY.forEach(function (lv, i) {
-    liRow(ul, (i + 1) + '. ' + lv.name, progress.journey[lv.id]);
+    liRow(ul, (i + 1) + '. ' + T(lv.name), progress.journey[lv.id]);
   });
 }
 function renderDaily() {
@@ -321,30 +323,32 @@ function renderDaily() {
     var date = Content.utcDateString(now - i * 86400000);
     var cfg = Content.dailyConfig(date);
     var li = liRow(ul,
-      (i === 0 ? 'Today' : date) + ' \u00b7 ' + cfg.players + ' seats \u00b7 ' + cfg.threshold + ' pts',
+      T('{day} · {seats} seats · {pts} pts', { day: i === 0 ? T('Today') : date, seats: cfg.players, pts: cfg.threshold }),
       progress.daily[date]);
     li.dataset.date = date;
   }
 }
 function renderPractice() {
   var ul = $('practice-list'); ul.innerHTML = '';
-  Content.PRACTICE.forEach(function (p) { liRow(ul, p.name, false); });
+  Content.PRACTICE.forEach(function (p) { liRow(ul, T(p.name), false); });
 }
 function renderChallenge() {
   var ul = $('challenge-list'); ul.innerHTML = '';
-  Content.CHALLENGES.forEach(function (c) { liRow(ul, c.name, progress.challenge[c.id]); });
+  Content.CHALLENGES.forEach(function (c) { liRow(ul, T(c.name), progress.challenge[c.id]); });
 }
 
 // ---------- help text ----------
-var HELP_TEXT = [
-  'Heartfall is a trick-taking card game. Pass cards, follow suit, avoid penalty hearts and the Nightshade Queen (Q♠) — or capture every penalty for an Eclipse.',
-  '',
-  'Lowest match score wins once anyone reaches the threshold; full-penalty capture applies the declared room rule.',
-  '',
-  null, // controls line: built from the effective key bindings (controlsHelp)
-  '',
-  'Results show a component breakdown rather than one unexplained total. Ties use, in order: primary objective completion, fewer invalid actions, lower authoritative elapsed time, then stable session identifier.'
-];
+function helpText() {
+  return [
+    T('Heartfall is a trick-taking card game. Pass cards, follow suit, avoid penalty hearts and the Nightshade Queen (Q♠) — or capture every penalty for an Eclipse.'),
+    '',
+    T('Lowest match score wins once anyone reaches the threshold; full-penalty capture applies the declared room rule.'),
+    '',
+    null, // controls line: built from the effective key bindings (controlsHelp)
+    '',
+    T('Results show a component breakdown rather than one unexplained total. Ties use, in order: primary objective completion, fewer invalid actions, lower authoritative elapsed time, then stable session identifier.')
+  ];
+}
 
 // ---------- keyboard bindings (StarHermit controls; defaults mirror starhermit.txt) ----------
 var DEFAULT_BINDINGS = { hint: ['KeyH'], undo: ['KeyU'], pause: ['Escape'] };
@@ -352,7 +356,7 @@ var bindings = JSON.parse(JSON.stringify(DEFAULT_BINDINGS));
 function keyName(code) {
   if (/^Key[A-Z]$/.test(code)) return code.slice(3);
   if (/^Digit\d$/.test(code)) return code.slice(5);
-  return code === 'Escape' ? 'Escape' : String(code).replace(/^Arrow/, '');
+  return code === 'Escape' ? T('Escape') : String(code).replace(/^Arrow/, '');
 }
 function keysFor(a) { return (bindings[a] || []).map(keyName).join('/'); }
 function actionFor(code) {
@@ -360,20 +364,19 @@ function actionFor(code) {
   return null;
 }
 function controlsHelp() {
-  return 'Controls: click or tap a card to select or play it. In Practice and Learn, ' + keysFor('hint') +
-    ' asks for a hint and ' + keysFor('undo') + ' undoes your last action. ' + keysFor('pause') +
-    ' or the pause button opens the pause menu.';
+  return T('Controls: click or tap a card to select or play it. In Practice and Learn, {hint} asks for a hint and {undo} undoes your last action. {pause} or the pause button opens the pause menu.',
+    { hint: keysFor('hint'), undo: keysFor('undo'), pause: keysFor('pause') });
 }
 function renderHelp() {
   var hp = document.querySelector('.help-panel');
-  if (hp) hp.innerHTML = HELP_TEXT.map(function (p) { return '<p>' + (p === null ? controlsHelp() : p) + '</p>'; }).join('');
+  if (hp) hp.innerHTML = helpText().map(function (p) { return '<p>' + I18N.esc(p === null ? controlsHelp() : p) + '</p>'; }).join('');
 }
 
 // ---------- play / session state (populated by startPlay) ----------
 var S = null; // { mode, id, level }
 var sess = null; // { game, passSel:[], hintCard:null, undoStack:[], resultsShown, lessonDone }
 
-function seatLabel(seat){ return Content.seatName(seat); }
+function seatLabel(seat){ return T(Content.seatName(seat)); } // 'You' translates; persona names stay
 function cardLabel(id){ return Rules.cardName(id); }
 function isPenaltyCard(id){ return Rules.isPenalty(id); }
 
@@ -406,12 +409,40 @@ function startPlay(mode, id) {
   $('hud-bottom').classList.remove('hidden');
   $('results-overlay').classList.add('hidden');
   $('pause-overlay').classList.add('hidden');
-  $('obj-title').textContent = level.name || level.title || 'Heartfall';
+  $('obj-title').textContent = levelTitle();
   showScreen('play');
   playSfx('cards-deal');
   syncUI();
   aiPump();
 }
+
+function levelTitle() {
+  var level = S && S.level;
+  if (!level) return 'Heartfall';
+  if (S.mode === 'daily') return T('Daily {date}', { date: level.date || S.id });
+  return level.name || level.title ? T(level.name || level.title) : 'Heartfall';
+}
+
+// Player-facing text for a refused pass/play (rules return stable reason codes).
+function reasonText(reason) {
+  switch (reason) {
+    case 'game-ended': return T('The match is over.');
+    case 'wrong-phase': return T('Not now.');
+    case 'not-your-turn': return T('It is not your turn.');
+    case 'card-not-in-hand': return T('That card is not in your hand.');
+    case 'must-lead-starter': return T('The first trick must open with the starting card.');
+    case 'must-follow-suit': return T('You must follow suit.');
+    case 'hearts-not-broken': return T('Hearts are not broken yet — lead another suit.');
+    case 'no-penalty-first-trick': return T('No penalty cards on the first trick.');
+    case 'wrong-pass-count': return T('Select the right number of cards to pass.');
+    case 'duplicate-pass-card': return T('Each card can be passed only once.');
+    case 'pass-already-submitted': return T('You already passed.');
+    default: return reason ? String(reason).replace(/-/g, ' ') : T('Not allowed.');
+  }
+}
+
+// Hint explanations come from the rules engine in English; they are keys here.
+function hintText(why) { return why ? T(why) : T('Try this.'); }
 
 // ---------- assists (hint / undo): practice and learn only ----------
 function assistsOn() { return S && (S.mode === 'practice' || S.mode === 'learn'); }
@@ -423,14 +454,14 @@ function doHint() {
   sess.hintCard = h.kind === 'play' ? h.card : null;
   if (h.kind === 'pass') sess.passSel = h.cards.slice();
   playSfx('hint');
-  toast(h.why || 'Try this.');
+  toast(hintText(h.why));
   syncUI();
 }
 
 function doUndo() {
   if (!sess || !sess.game || !assistsOn()) return;
   var prev = sess.undoStack.pop();
-  if (!prev) { playSfx('invalid'); toast('Nothing to undo.'); return; }
+  if (!prev) { playSfx('invalid'); toast(T('Nothing to undo.')); return; }
   sess.game = Rules.deserialize(prev);
   sess.passSel = []; sess.hintCard = null;
   playSfx('undo');
@@ -456,7 +487,7 @@ function checkLessonComplete(kind, events) {
     var trick = events.filter(function (e) { return e.type === 'trick'; })[0];
     if (trick) {
       if (trick.winner !== 0) done = true;
-      else toast('You took the trick — try to stay out of it.');
+      else toast(T('You took the trick — try to stay out of it.'));
     }
   } else if (goal === 'eclipse') {
     done = events.some(function (e) { return e.type === 'eclipse' && e.p === 0; });
@@ -470,13 +501,19 @@ function lessonComplete() {
   playSfx('lesson-complete');
   var lessons = Content.tutorialLessons();
   var hasNext = S.id + 1 < lessons.length;
+  var title = S.level.title;
+  overlayView = function () {
+    return '<h2>' + TH('Lesson complete.') + '</h2><div class="panel"><p>' + TH('{lesson} — done.', { lesson: T(title) }) + '</p></div>' +
+      '<nav class="menu">' +
+      (hasNext ? '<button data-act="next-lesson" class="primary big">' + TH('Next lesson') + '</button>' : '') +
+      '<button data-act="exit-learn"' + (hasNext ? '' : ' class="primary big"') + '>' + TH('Back to lessons') + '</button></nav>';
+  };
   var ov = $('results-overlay');
-  ov.innerHTML = '<h2>Lesson complete.</h2><div class="panel"><p>' + S.level.title + ' — done.</p></div>' +
-    '<nav class="menu">' +
-    (hasNext ? '<button data-act="next-lesson" class="primary big">Next lesson</button>' : '') +
-    '<button data-act="exit-learn"' + (hasNext ? '' : ' class="primary big"') + '>Back to lessons</button></nav>';
+  ov.innerHTML = overlayView();
   ov.classList.remove('hidden');
 }
+// The results / lesson overlay's markup, rebuilt in place on a language change.
+var overlayView = null;
 
 // ---------- play-screen rendering & turn loop ----------
 var pumpToken = 0;
@@ -491,9 +528,12 @@ function toast(msg) {
 
 function objectiveText() {
   var g = sess.game;
-  if (g.phase === 'pass') return 'Pass ' + g.cfg.passCount + ' card' + (g.cfg.passCount === 1 ? '' : 's') + ' ' + String(g.passDir || '') + '.';
-  if (g.phase === 'play') return g.actor === 0 ? 'Your turn — play a card.' : seatLabel(g.actor) + ' is thinking…';
-  return 'Match over.';
+  if (g.phase === 'pass') {
+    var dir = { left: T('to the left'), right: T('to the right'), across: T('across') }[g.passDir] || '';
+    return g.cfg.passCount === 1 ? T('Pass 1 card {dir}.', { dir: dir }) : T('Pass {n} cards {dir}.', { n: g.cfg.passCount, dir: dir });
+  }
+  if (g.phase === 'play') return g.actor === 0 ? T('Your turn — play a card.') : T('{seat} is thinking…', { seat: seatLabel(g.actor) });
+  return T('Match over.');
 }
 
 function renderScores() {
@@ -539,13 +579,13 @@ function renderActions() {
     box.appendChild(b);
   }
   if (g.phase === 'pass' && !g.passes[0]) {
-    btn('Pass ' + sess.passSel.length + '/' + g.cfg.passCount, 'primary', function () {
-      if (sess.passSel.length !== g.cfg.passCount) { playSfx('invalid'); toast('Select ' + g.cfg.passCount + ' cards to pass.'); return; }
+    btn(T('Pass {n}/{total}', { n: sess.passSel.length, total: g.cfg.passCount }), 'primary', function () {
+      if (sess.passSel.length !== g.cfg.passCount) { playSfx('invalid'); toast(T('Select {n} cards to pass.', { n: g.cfg.passCount })); return; }
       var reason = Rules.checkPass(g, 0, sess.passSel);
-      if (reason) { playSfx('invalid'); toast(reason); return; }
+      if (reason) { playSfx('invalid'); toast(reasonText(reason)); return; }
       if (assistsOn()) sess.undoStack.push(Rules.serialize(g));
       var r = Rules.applyCommand(g, { type: 'pass', p: 0, cards: sess.passSel.slice() });
-      if (!r.ok) { playSfx('invalid'); toast(r.reason || 'Cannot pass those.'); return; }
+      if (!r.ok) { playSfx('invalid'); toast(r.reason ? reasonText(r.reason) : T('Cannot pass those.')); return; }
       sess.game = r.state; sess.passSel = []; sess.hintCard = null;
       playSfx('card-pass');
       checkLessonComplete('pass', r.events);
@@ -553,8 +593,8 @@ function renderActions() {
     });
   }
   if (assistsOn()) {
-    btn('Hint', '', doHint);
-    btn('Undo', '', doUndo);
+    btn(T('Hint'), '', doHint);
+    btn(T('Undo'), '', doUndo);
   }
 }
 
@@ -583,11 +623,7 @@ var tableArt = null;
 // ---------- graphics: resolved quality, pixel ratio, animation loop ----------
 var gpuName = Fx.detectGpu();
 var detectedPreset = Gfx.detectPreset(gpuName, { mobile: Fx.isMobile() });
-var gfxLocale = (function () {
-  var q = null;
-  try { q = new URLSearchParams(location.search).get('lang'); } catch (_) {}
-  return Gfx.pickLocale([q].concat(navigator.languages || [navigator.language]));
-})();
+var gfxLocale = I18N.lang; // follows the game language (hf-language)
 var canFilter = Fx.supportsFilter();
 var fxFailed = false;          // an effect pass threw: render without effects, say so in the panel
 var R = Gfx.resolve(settings.gfx, detectedPreset);
@@ -727,7 +763,7 @@ function drawTable(tNow) {
   ctx.fillStyle = '#cfe0ff';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';   // top-left: clear of the centred HUD and hand at every size
-  ctx.fillText('Round ' + g.round + (g.heartsBroken ? ' · hearts broken' : ''), 12, 12);
+  ctx.fillText(g.heartsBroken ? T('Round {n} · hearts broken', { n: g.round }) : T('Round {n}', { n: g.round }), 12, 12);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 }
@@ -842,11 +878,20 @@ function applyGraphics() {
 // ---------- Graphics settings panel (built into the Settings screen) ----------
 function gt(key, vars) { return Gfx.t(gfxLocale, key, vars); }
 function tierName(cat, tier) { return gt('tier.' + tier); }
+// The Graphics rows live in their own box inside the fieldset, so a language
+// change redraws only that box; the shared Sound / frame-rate / Language /
+// Report sections that game-options.js mounts in the fieldset stay put.
 function buildGfxPanel() {
   var fs = $('gfx-fieldset');
   if (!fs) return;
-  fs.setAttribute('lang', gfxLocale);
   $('gfx-legend').textContent = gt('graphics');
+  var box = $('gfx-box');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'gfx-box';
+    fs.insertBefore(box, $('gfx-legend').nextSibling);
+  }
+  box.setAttribute('lang', gfxLocale);
   var html = '';
   html += '<div class="gfx-row"><label for="gfx-preset">' + gt('quality') + '</label><select id="gfx-preset" data-gfx="preset"></select></div>';
   html += '<div class="gfx-row gfx-scale"><label for="gfx-scale">' + gt('renderScale') + '</label>' +
@@ -860,7 +905,7 @@ function buildGfxPanel() {
   html += '<label class="chk"><input type="checkbox" id="gfx-fps" data-gfx="show_fps"> ' + gt('showFps') + '</label>';
   html += '<p id="gfx-summary" class="gfx-summary" aria-live="polite"></p>';
   html += '<p id="gfx-note" class="gfx-note hidden" role="note"></p>';
-  fs.insertAdjacentHTML('beforeend', html);
+  box.innerHTML = html;
 
   $('gfx-preset').addEventListener('change', function (e) {
     settings.gfx = Gfx.choosePreset(settings.gfx, e.target.value);
@@ -870,7 +915,7 @@ function buildGfxPanel() {
     settings.gfx.render_scale = Number(e.target.value) / 100;
     saveSettings(); applyGraphics();
   });
-  fs.querySelectorAll('[data-gfx-cat]').forEach(function (sel) {
+  box.querySelectorAll('[data-gfx-cat]').forEach(function (sel) {
     sel.addEventListener('change', function () {
       var cat = sel.getAttribute('data-gfx-cat');
       if (sel.value === 'preset') delete settings.gfx[cat]; else settings.gfx[cat] = sel.value;
@@ -968,7 +1013,7 @@ function onHandClick(e) {
     var i = sess.passSel.indexOf(card);
     if (i >= 0) sess.passSel.splice(i, 1);
     else if (sess.passSel.length < g.cfg.passCount) sess.passSel.push(card);
-    else { playSfx('invalid'); toast('Only ' + g.cfg.passCount + ' cards.'); return; }
+    else { playSfx('invalid'); toast(T('Only {n} cards.', { n: g.cfg.passCount })); return; }
     sess.hintCard = null;
     playSfx('card-select');
     syncUI();
@@ -976,10 +1021,10 @@ function onHandClick(e) {
   }
   if (g.phase === 'play' && g.actor === 0) {
     var reason = Rules.checkPlay(g, 0, card);
-    if (reason) { playSfx('invalid'); toast(reason); return; }
+    if (reason) { playSfx('invalid'); toast(reasonText(reason)); return; }
     if (assistsOn()) sess.undoStack.push(Rules.serialize(g));
     var r = Rules.applyCommand(g, { type: 'play', p: 0, card: card });
-    if (!r.ok) { playSfx('invalid'); toast(r.reason || 'Cannot play that.'); return; }
+    if (!r.ok) { playSfx('invalid'); toast(r.reason ? reasonText(r.reason) : T('Cannot play that.')); return; }
     sess.game = r.state; sess.hintCard = null;
     playSfx('card-play');
     playEventSfx(r.events, 0);
@@ -1010,7 +1055,7 @@ function grantAchievement(newly, key) {
   if (progress.achievements[key]) return;
   progress.achievements[key] = true;
   var def = Content.ACHIEVEMENTS.filter(function (a) { return a.key === key; })[0];
-  if (def) newly.push(def.name);
+  if (def) newly.push(T(def.name));
 }
 function awardAchievements(g) {
   var won = g.terminal.winners.indexOf(0) >= 0;
@@ -1029,33 +1074,43 @@ function awardAchievements(g) {
   var ddone = Object.keys(progress.daily).filter(function (k) { return progress.daily[k]; }).length;
   if (ddone >= 7) grantAchievement(newly, 'daily-7');
   saveProgress();
-  if (newly.length) toast('Achievement unlocked: ' + newly.join(' · '));
+  if (newly.length) toast(T('Achievement unlocked: {names}', { names: newly.join(' · ') }));
 }
 
 function showResults() {
   var g = sess.game, ov = $('results-overlay');
   var t = g.terminal;
-  var rows = t.scores.map(function (s, p) {
-    return '<div class="score-row' + (t.winners.indexOf(p) >= 0 ? ' winner' : '') + '">' + seatLabel(p) + ': ' + s + '</div>';
-  }).join('');
-  var head = t.winners.indexOf(0) >= 0 ? 'You win the table.' : seatLabel(t.winner) + ' takes the table.';
   playSfx(t.winners.indexOf(0) >= 0 ? 'match-win' : 'match-lose');
-  var goalLine = '';
+  var met = null, level = S.level;
   if (S.mode === 'journey' || S.mode === 'challenge') {
-    var met = goalMet(S.level, g);
-    if (met) markDone(S.mode, S.level.id);
-    goalLine = '<p class="goal-line ' + (met ? 'done' : 'failed') + '">' +
-      Content.goalText(S.level.goal) + (met ? ' — achieved' : ' — not met') + '</p>';
+    met = goalMet(level, g);
+    if (met) markDone(S.mode, level.id);
   }
-  if (S.mode === 'daily') markDone('daily', S.level.date || S.id);
+  if (S.mode === 'daily') markDone('daily', level.date || S.id);
   awardAchievements(g);
-  ov.innerHTML = '<h2>' + head + '</h2><div class="panel">' + rows + goalLine +
-    '<p id="results-lb" class="goal-line hidden" aria-live="polite"></p></div>' +
-    '<nav class="menu"><button data-act="again" class="primary big">Play again</button>' +
-    '<button data-act="leave">Leave to title</button></nav>';
+  lbLine = null;
+  overlayView = function () {
+    var rows = t.scores.map(function (s, p) {
+      return '<div class="score-row' + (t.winners.indexOf(p) >= 0 ? ' winner' : '') + '">' + TH('{seat}: {score}', { seat: seatLabel(p), score: s }) + '</div>';
+    }).join('');
+    var head = t.winners.indexOf(0) >= 0 ? TH('You win the table.') : TH('{seat} takes the table.', { seat: seatLabel(t.winner) });
+    var goalLine = met === null ? '' : '<p class="goal-line ' + (met ? 'done' : 'failed') + '">' +
+      TH(met ? '{goal} — achieved' : '{goal} — not met', { goal: goalText(level.goal) }) + '</p>';
+    return '<h2>' + head + '</h2><div class="panel">' + rows + goalLine +
+      '<p id="results-lb" class="goal-line' + (lbLine ? '' : ' hidden') + '" aria-live="polite">' + (lbLine ? I18N.esc(lbLine()) : '') + '</p></div>' +
+      '<nav class="menu"><button data-act="again" class="primary big">' + TH('Play again') + '</button>' +
+      '<button data-act="leave">' + TH('Leave to title') + '</button></nav>';
+  };
+  ov.innerHTML = overlayView();
   ov.classList.remove('hidden');
   postToLeaderboard(g);
 }
+
+// Goal line text: content goal templates are translation keys.
+function goalText(goal) {
+  return T(Content.GOAL_TEXT[goal.type] || Content.GOAL_TEXT.win, { v: goal.value - 1 });
+}
+var lbLine = null; // results leaderboard line (function → text in the current language)
 
 // Signed in: Journey, Daily and Challenge matches post the winning margin
 // (lowest opponent total minus yours; negative when behind) to the platform
@@ -1066,11 +1121,15 @@ function postToLeaderboard(g) {
   if (S.mode !== 'journey' && S.mode !== 'daily' && S.mode !== 'challenge') return;
   var sc = g.terminal.scores, opp = Infinity;
   for (var p = 1; p < sc.length; p++) opp = Math.min(opp, sc[p]);
-  line.textContent = gt('lb.posting');
+  lbLine = function () { return gt('lb.posting'); };
+  line.textContent = lbLine();
   line.classList.remove('hidden');
   Platform.submitScore('margin', opp - sc[0]).then(function (r) {
-    line.textContent = !r.posted ? gt('lb.notPosted')
-      : r.rank ? gt('lb.rank', { rank: r.rank }) : gt('lb.posted');
+    lbLine = function () {
+      return !r.posted ? gt('lb.notPosted') : r.rank ? gt('lb.rank', { rank: r.rank }) : gt('lb.posted');
+    };
+    var el = $('results-lb');
+    if (el) el.textContent = lbLine();
   });
 }
 
@@ -1231,7 +1290,9 @@ if (musicSlider) {
 // ---------- StarHermit platform: hosted identity + cloud save (inert offline) ----------
 // The chip is the game's name/status slot: account nickname + sync state,
 // shown only when a launch token made us hosted. Remote doc wins on load.
-var SYNC_LABELS = { syncing: 'Syncing…', saving: 'Saving…', synced: 'Cloud synced', error: 'Cloud unreachable' };
+function syncLabel(state) {
+  return { syncing: T('Syncing…'), saving: T('Saving…'), synced: T('Cloud synced'), error: T('Cloud unreachable') }[state];
+}
 var wasHosted = false;
 function renderPlayerChip() {
   var chip = $('player-chip');
@@ -1242,8 +1303,8 @@ function renderPlayerChip() {
   var inv = $('btn-invite'); if (inv) inv.classList.toggle('hidden', !hosted);
   if (!chip) return;
   if (!hosted) { chip.classList.add('hidden'); return; }
-  var name = Platform.nickname || ('Player ' + String(Platform.sub || '').slice(0, 6));
-  var label = SYNC_LABELS[Platform.sync];
+  var name = Platform.nickname || T('Player {id}', { id: String(Platform.sub || '').slice(0, 6) });
+  var label = syncLabel(Platform.sync);
   chip.textContent = '';
   if (Platform.avatar) {
     var img = document.createElement('img');
@@ -1318,8 +1379,31 @@ function adoptRemoteDoc(doc) {
   writeLocalCache(); // adopt without re-pushing: the remote already holds this doc
   applySettingsToUI();
 }
+// Cloud-save conflict: another device saved since our load. Keep both sides'
+// progress — completed lessons/stages/dailies/challenges and achievements are
+// unions, matches played takes the larger count — keep this device's settings
+// and win streak and the match in progress, then save the merged doc.
+function mergeConflictDoc(doc) {
+  var q = doc && doc.progress;
+  if (q && typeof q === 'object') {
+    ['learn', 'journey', 'challenge', 'daily', 'achievements'].forEach(function (k) {
+      var remote = q[k];
+      if (!remote || typeof remote !== 'object') return;
+      Object.keys(remote).forEach(function (id) { if (remote[id]) progress[k][id] = remote[id]; });
+    });
+    if (q.stats && typeof q.stats.played === 'number') progress.stats.played = Math.max(progress.stats.played, q.stats.played);
+  }
+  writeLocalCache();
+  cloudPush();
+  if (screenNow === 'learn') renderLearn();
+  else if (screenNow === 'journey') renderJourney();
+  else if (screenNow === 'daily') renderDaily();
+  else if (screenNow === 'challenge') renderChallenge();
+}
+
 if (Platform) {
   Platform.onRemote(adoptRemoteDoc);
+  if (Platform.onConflict) Platform.onConflict(mergeConflictDoc);
   Platform.onStatus(renderPlayerChip);
   Platform.init();
   renderPlayerChip();
@@ -1331,6 +1415,31 @@ if (Platform) {
     });
   }
 }
+
+// Language change (Settings → Language): static markup is re-applied by
+// i18n.js; redraw everything built in code without touching the match.
+document.addEventListener('hf-language', function () {
+  gfxLocale = I18N.lang;
+  buildGfxPanel();
+  refreshGfxPanel();
+  renderFps();
+  renderHelp();
+  if (screenNow === 'learn') renderLearn();
+  else if (screenNow === 'journey') renderJourney();
+  else if (screenNow === 'daily') renderDaily();
+  else if (screenNow === 'practice') renderPractice();
+  else if (screenNow === 'challenge') renderChallenge();
+  var si = $('btn-signin'); if (si) si.textContent = gt('sh.signIn');
+  var inv = $('btn-invite'); if (inv) inv.textContent = gt('sh.invite');
+  wasHosted = !!(Platform && Platform.isHosted());
+  renderPlayerChip();
+  if (sess && sess.game) {
+    $('obj-title').textContent = levelTitle();
+    syncUI();
+    var ov = $('results-overlay');
+    if (overlayView && !ov.classList.contains('hidden')) ov.innerHTML = overlayView();
+  }
+});
 
 window.HFGame = {
   settings: loadSettings,

@@ -26,7 +26,9 @@ burns out — unless you can take *every* penalty and turn the night inside out.
 
 | Path | Contents |
 |---|---|
-| `index.html` | All ten screens as static markup; loads the five scripts in order |
+| `index.html` | All ten screens as static markup; loads `sh-language.js`, `js/strings.js`, `js/i18n.js`, then the game scripts in order |
+| `sh-language.js` | Shared StarHermit language preference (`window.StarHermitLanguage`), an unmodified copy of `tools/sh-language.js` |
+| `js/strings.js`, `js/i18n.js` | Translation tables (English source strings as keys) and `HFI18N` (`T`, `TH`, static-markup translation, `hf-language` event) |
 | `css/style.css` | Complete stylesheet: palette tokens, screens, cards, HUD, overlays, key-art backgrounds |
 | `js/rng.js` | `HFRNG`: mulberry32 PRNG, FNV-1a `hashString`, three derived streams (rules / decor / av) |
 | `js/rules.js` | `HFRules`: the whole rules contract — deck, deal, pass, legality, trick resolution, scoring, terminal states, AI, hints, serialization |
@@ -42,7 +44,7 @@ burns out — unless you can take *every* penalty and turn the night inside out.
 | `sfx/` | 20 Opus clips + `manifest.txt` (canonical, code-bound) + `manifest.md`/`manifest.json` (generation prompts) |
 | `assets/` | `keyart.webp`, `table.webp`, `eclipse.webp` |
 | `coverart.png` | 1200×675 store cover |
-| `tests/rules-sanity.mjs`, `tests/lesson-check.mjs`, `tests/gfx.test.mjs`, `tests/platform.test.mjs` | `npm test` (the last two under `node --test`) |
+| `tests/rules-sanity.mjs`, `tests/lesson-check.mjs`, `tests/gfx.test.mjs`, `tests/platform.test.mjs`, `tests/i18n.test.mjs` | `npm test` (the last three under `node --test`; i18n checks every used key in all nine locales and live switching, platform covers the save-conflict reload) |
 | `tests/e2e.mjs` | Playwright playthrough of the real UI at desktop and mobile |
 | `starhermit.txt` | Platform manifest: name, launch, owner, server, version, contentVersion, cover, `control.*` key bindings |
 
@@ -443,26 +445,35 @@ seat caused them.
 
 ## 10. Localization
 
-**Shipped today: en-US only**, except the Settings → Graphics section, whose strings live in
-`js/gfx.js` for all nine locales below (en-GB, es-ES and fr-CA inherit their base and override
-where they differ), chosen from `?lang=` then `navigator.languages`. All other player-visible text is hard-coded English, in three places:
-static markup in `index.html` (menu labels, mode cards, settings legends), the `HELP_TEXT` array
-and toast strings in `js/game.js`, and the authored content strings in `js/content.js` (stage
-names, intros, `GOAL_TEXT`, persona names, achievement names/descriptions). Some toasts surface
-raw rule ids (`must-follow-suit`) rather than sentences.
+Nine locales ship: **en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT**. Every
+player-visible string is an English key in `js/strings.js` with es-419, de-DE, fr-FR, pt-BR and
+it-IT translations; en-GB, es-ES and fr-CA carry only their differences and otherwise inherit
+en-US, es-419 and fr-FR. That covers the static markup in `index.html` (menus, mode cards, screen
+headings, settings legends, pause menu, aria-labels — translated in place by `js/i18n.js`), the
+text built in `js/game.js` (help, lists, objective, scores, action buttons, toasts, the canvas
+"Round n" line, results and lesson overlays, sync chip), the rules engine's hint lines and
+rejection reasons (each rule id gets one sentence), and the content names in `js/content.js`
+(stage, challenge, practice and lesson names, `GOAL_TEXT`, achievement names, the "You" seat).
+The Graphics panel and the account strings (sign-in, invite, toasts, results rank line) keep
+their nine-locale tables in `js/gfx.js`. "Heartfall", "StarHermit" and the persona names (Fern,
+Moth, Luna, Pip) are not translated; card faces are rank glyphs plus suit symbols in every locale.
 
-**Required set** (product rule): en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT.
-
-**The design the code is shaped for.** A single `js/i18n.js` exposing `t(key, vars)` over one
-`data/strings/<locale>.json` per language, keyed by dotted ids (`menu.play`, `rule.follow-suit`,
-`stage.j04.intro`), with `en-US` as the fallback chain terminus (`fr-CA → fr-FR → en-US`,
-`es-ES → es-419 → en-US`, `en-GB → en-US`). Language is chosen by, in order: a `?lang=` query
-parameter, a persisted `hf-lang-v1` setting, then `navigator.languages`. Static markup carries
-`data-i18n` attributes so one pass at boot can rewrite it. Expansion allowance: German and
-French run 30–35 % longer than English, so every button is sized by content with wrapping
-allowed, and the three fixed-width elements (⏸, back arrow, card faces) contain no words —
-card faces are rank glyphs plus suit symbols, which need no translation in any target locale.
-See **Design intent not yet implemented**.
+- **Language setting:** Settings → **Language → Game language** (rendered by the shared
+  `game-options.js` inside the Graphics fieldset; Settings is reachable from the title and from
+  the pause menu mid-match) offers **Automatic — <resolved language>** plus the nine locales by
+  native name, with a sync status line.
+- **Resolution** (`sh-language.js`): explicit game choice → for Automatic, the StarHermit
+  account's `preferredLanguage` (`GET /api/v1/me/language`, signed in only) →
+  `navigator.languages` → en-US, mapped to the nearest shipped locale (`es-MX → es-419`,
+  `en-AU → en-GB`). The choice is stored per player in
+  `localStorage['heartfall.language.<user|guest>']` and, signed in, in the per-player settings
+  key `ui.language` as `{ choice }`; the game never writes the platform preference. `?lang=`
+  forces a locale for the page load (QA links) and hides the selector.
+- **Live switching:** a change sets `<html lang>`, re-applies the static markup and fires
+  `hf-language`; `js/game.js` redraws the Graphics box (only its own rows, so the shared Sound /
+  frame-rate / Language / Report sections survive), help, the open list, the account chip, the
+  HUD, canvas and an open results/lesson overlay — the match, hand and AI turn order are untouched.
+- **Expansion:** buttons size to content and wrap; German and Portuguese fit at 390 px wide.
 
 ---
 
@@ -510,12 +521,20 @@ from the token's `game_scope`, never hard-coded; the SDK renews the token before
 renewal is refused the chip and Invite button disappear, a toast says the player is signed out,
 and play continues locally. Signed in, the game:
 
-- shows a chip on the title screen with the avatar, the profile nickname (fallback `Player ` +
-  id prefix) and the sync state;
+- shows a chip on the title screen with the avatar, the profile nickname (localized fallback
+  "Player <id prefix>") and the sync state;
 - loads the cloud-save slot `game:<slug>` remote-first and adopts it (settings + progress), then
   mirrors every settings/progress change (nothing is uploaded while that load runs; a change made
   meanwhile is dropped if a remote doc was adopted, else pushed after it) with a 2 s debounce and a keepalive flush on
   `pagehide`/hidden; `hf-settings-v1`/`hf-progress-v1` stay the offline cache;
+- writes are conditional on the version last read: when another device saved first
+  (`saveconflict`), the game reloads the cloud doc and merges it — completed lessons, stages,
+  dailies, challenges and achievements are unions, matches played takes the larger count, this
+  device's settings, win streak and match in progress stay — then saves the merged doc;
+- Settings → **Report a problem** (from `game-options.js`) files a bug report through
+  `StarHermit.reportBug` with a small non-personal `context.json`; uncaught errors are filed as
+  crash reports through `StarHermit.captureCrashes` (capped by the SDK);
+- reads the per-player `ui.language` setting and the account's preferred language (§10);
 - mirrors the settings object (`music`, `sfx`, `gfx`, `reducedMotion`, `largeText`) to the
   per-game settings KV on every change and applies the KV values over the local ones on start;
 - resolves the `control.hint` (H), `control.undo` (U) and `control.pause` (Escape) bindings via
@@ -665,10 +684,8 @@ errors/warnings.
 
 ## 16. Known limitations
 
-1. **No localization** outside the Graphics panel (which is localized in all nine locales from
-   `?lang=` / `navigator.languages`). Other en-US strings are hard-coded in three places; the other eight required
-   locales are absent (§10). Some toasts show raw rule ids (`must-follow-suit`,
-   `hearts-not-broken`) instead of sentences.
+1. **Unshown content stays English.** Stage intros, lesson body texts, theme names and persona
+   tags exist in `js/content.js` but no screen displays them, so they have no translations.
 2. **No server-authoritative records.** Identity, cloud save and token refresh are wired (§12),
    but presence/sessions are unwired, the margin leaderboard is not replay-verified, and there is
    no server-validated achievement unlock — achievements are local flags inside the
@@ -698,10 +715,6 @@ errors/warnings.
 
 ## Design intent not yet implemented
 
-* **Nine-locale localization** exactly as specified in §10: `js/i18n.js` with `t(key, vars)`,
-  `data/strings/<locale>.json` for en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT,
-  `data-i18n` attributes on the static markup, the fallback chains, and `?lang=` / stored setting /
-  `navigator.languages` selection. Rule-rejection ids get one localized sentence each.
 * **StarHermit presence + validated Daily leaderboard**: report presence while a match is live,
   open a session per match and close it with the final score, and submit Daily results to a
   per-date leaderboard keyed on `daily-YYYY-MM-DD`. `server.js` grows a verification endpoint
