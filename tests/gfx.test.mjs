@@ -1,20 +1,49 @@
 // Unit tests for the pure graphics quality model (js/gfx.js). Run: node --test tests/
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import '../js/gfx.js';
+import { readFileSync } from 'node:fs';
+// js/gpu-level.js is a classic script in the page (window.StarHermitGpu); evaluate it the same way here.
+new Function('window', readFileSync(new URL('../js/gpu-level.js', import.meta.url), 'utf8'))(globalThis);
+await import('../js/gfx.js');
 const G = globalThis.HFGfx;
 
-test('detectPreset maps GPU strings to tiers', () => {
-  assert.equal(G.detectPreset('ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)), SwiftShader driver)'), 'low');
-  assert.equal(G.detectPreset('llvmpipe (LLVM 15.0.7, 256 bits)'), 'low');
-  assert.equal(G.detectPreset(''), 'low');
-  assert.equal(G.detectPreset('ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 Direct3D11 vs_5_0 ps_5_0)'), 'high');
-  assert.equal(G.detectPreset('Apple M2'), 'high');
-  assert.equal(G.detectPreset('ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11)'), 'balanced');
-  assert.equal(G.detectPreset('Adreno (TM) 650'), 'balanced');
-  // touch/mobile devices cap Auto at balanced
-  assert.equal(G.detectPreset('Apple M2', { mobile: true }), 'balanced');
-  assert.equal(G.detectPreset('SwiftShader', { mobile: true }), 'low');
+const DESK = { cores: 8, memoryGb: 8 };
+const PHONE = { mobile: true, cores: 8, memoryGb: 8 };
+
+test('hardware level picks the Auto preset (Low 0, Balanced 4, High 10, Ultra 17)', () => {
+  assert.equal(G.detectPreset('ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)', DESK), 'low');
+  assert.equal(G.detectLevel('llvmpipe (LLVM 15.0.7, 256 bits)', DESK), 0);
+  assert.equal(G.detectPreset('', DESK), 'low', 'no WebGL');
+  assert.equal(G.detectPreset('ANGLE (AMD, AMD Radeon(TM) Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)', DESK), 'low');
+  assert.equal(G.detectPreset('ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11)', DESK), 'low');
+  assert.equal(G.detectPreset('ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11)', DESK), 'balanced');
+  assert.equal(G.detectPreset('ANGLE (NVIDIA, NVIDIA GeForce GTX 1070 Direct3D11 vs_5_0 ps_5_0)', DESK), 'high');
+  assert.equal(G.detectPreset('ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 Direct3D11 vs_5_0 ps_5_0)', DESK), 'ultra');
+  assert.equal(G.detectLevel('ANGLE (NVIDIA, NVIDIA GeForce RTX 5090 Direct3D11 vs_5_0 ps_5_0)', DESK), 20);
+  assert.equal(G.detectPreset('ANGLE (NVIDIA, NVIDIA GeForce RTX 5090 Direct3D11 vs_5_0 ps_5_0)', DESK), 'ultra');
+  for (const [p, lv] of Object.entries(G.LEVELS)) assert.equal(G.presetForLevel(lv), p);
+  assert.equal(G.presetForLevel(3), 'low');
+  assert.equal(G.presetForLevel(16), 'high');
+});
+
+test('phones and tablets are Balanced at most; software GPUs stay Low', () => {
+  assert.equal(G.detectPreset('Adreno (TM) 740', PHONE), 'balanced');
+  assert.ok(G.detectLevel('Adreno (TM) 740', PHONE) <= 9);
+  assert.equal(G.detectPreset('NVIDIA GeForce RTX 5090', PHONE), 'balanced');
+  assert.equal(G.detectPreset('SwiftShader', PHONE), 'low');
+});
+
+test('per-preset budgets are explicit, grow from Low to Ultra and scale with the level', () => {
+  const P = G.PRESETS, B = G.BUDGETS;
+  const keys = ['fireflies', 'glowSprite', 'labelGlow', 'cardShadow', 'bakeLight'];
+  for (const p of P) for (const k of keys) assert.ok(B[p][k] != null, `${p}.${k}`);
+  for (let i = 1; i < P.length; i++) for (const k of keys) if (typeof B.low[k] === 'number') assert.ok(B[P[i]][k] >= B[P[i - 1]][k], `${P[i]}.${k}`);
+  assert.deepEqual(P.map((p) => B[p].bakeLight), [true, true, false, false]);
+  assert.deepEqual(G.resolve({ preset: 'high' }, 'low', 10).budget, B.high, 'floor level = the tuned budget');
+  assert.deepEqual(G.resolve({ preset: 'ultra' }, 'low', 0).budget, G.resolve({ preset: 'ultra' }, 'ultra', 17).budget, 'manual Ultra on a weak GPU keeps the Ultra floor budget');
+  assert.ok(G.budgetFor('balanced', 9).fireflies > G.budgetFor('balanced', 4).fireflies, 'counts scale up within the preset');
+  assert.equal(G.resolve({ preset: 'ultra' }, 'ultra', 17).particleCount, B.ultra.fireflies);
+  assert.equal(G.resolve({ preset: 'low', shadows: 'high' }, 'low', 0).shadowBlur, B.low.cardShadow, 'card shadow blur capped by the budget');
 });
 
 test('resolve: auto uses detected preset, explicit preset wins', () => {

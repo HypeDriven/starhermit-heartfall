@@ -622,11 +622,22 @@ var tableArt = null;
 
 // ---------- graphics: resolved quality, pixel ratio, animation loop ----------
 var gpuName = Fx.detectGpu();
-var detectedPreset = Gfx.detectPreset(gpuName, { mobile: Fx.isMobile() });
+// StarHermit hardware level (js/gpu-level.js): renderer string + device facts (phone/tablet, cores, memory).
+var gpuLevel = (function () {
+  var sys = { mobile: Fx.isMobile() };
+  try {
+    if (window.StarHermitGpu) {
+      var d = window.StarHermitGpu.detectSystem();
+      sys = { mobile: sys.mobile || d.mobile, touch: d.touch, screen: d.screen, cores: d.cores, memoryGb: d.memoryGb, webgl2: d.webgl2, astc: d.astc };
+    }
+  } catch (_) { /* defaults */ }
+  return Gfx.detectLevel(gpuName, sys);
+})();
+var detectedPreset = Gfx.presetForLevel(gpuLevel);
 var gfxLocale = I18N.lang; // follows the game language (hf-language)
 var canFilter = Fx.supportsFilter();
 var fxFailed = false;          // an effect pass threw: render without effects, say so in the panel
-var R = Gfx.resolve(settings.gfx, detectedPreset);
+var R = Gfx.resolve(settings.gfx, detectedPreset, gpuLevel);
 var adaptiveScale = 1;
 var tableParticles = [], titleParticles = [];
 var baseLayer = null, baseKey = '';
@@ -656,9 +667,15 @@ function fitCanvas(cv) {
   return { ctx: ctx, w: w, h: h, bw: bw, bh: bh, k: k };
 }
 
-// The painted plate + scrim, graded (contrast/saturation) when the grade is on.
-// Graded plates are cached: ctx.filter is the one expensive step.
-function paintBase(ctx, w, h, bw, bh) {
+// Lamp pool + moonlight are baked into the cached plate when the budget says so and nothing flickers.
+function bakedLight() {
+  return effectsOn() && R.budget.bakeLight && !(gfxMotion() && R.background === 'animated');
+}
+
+// The painted plate + scrim, graded (contrast/saturation) when the grade is on, and — when the light is
+// baked (Low/Balanced, or a still scene) — the lamp pool, moonlight and vignette. The plate is cached at
+// the backing-store size and blitted each frame; it is rebuilt only when its inputs change.
+function paintBase(ctx, w, h, bw, bh, lamp) {
   function paint(c) {
     c.fillStyle = '#17251d';
     c.fillRect(0, 0, w, h);
@@ -674,14 +691,18 @@ function paintBase(ctx, w, h, bw, bh) {
       c.beginPath(); c.ellipse(w / 2, h / 2, w * 0.38, h * 0.34, 0, 0, Math.PI * 2); c.fill();
     }
   }
-  if (R.grade !== 'on' || !canFilter || !effectsOn()) { paint(ctx); return; }
-  var key = [bw, bh, !!(tableArt && tableArt.width)].join('x');
+  var bake = bakedLight();
+  var key = [bw, bh, w, h, !!(tableArt && tableArt.width), R.grade, canFilter && effectsOn(), bake, R.lighting].join('x');
   if (!baseLayer || baseKey !== key) {
-    baseLayer = document.createElement('canvas');
+    if (!baseLayer) baseLayer = document.createElement('canvas');
     baseLayer.width = bw; baseLayer.height = bh;
     var bc = baseLayer.getContext('2d');
     bc.setTransform(bw / w, 0, 0, bh / h, 0, 0);
     paint(bc);
+    if (bake) {
+      if (R.lighting === 'lamp') { Fx.drawMoonWash(bc, w, h, 0); Fx.drawLampPool(bc, lamp[0], lamp[1], lamp[2], 0.6, R); }
+      if (R.grade === 'on') Fx.drawVignette(bc, w, h, 0.5);
+    }
     baseKey = key;
   }
   ctx.save();
@@ -695,12 +716,13 @@ function paintAtmosphere(ctx, w, h, t, particles, lamp) {
   if (!effectsOn()) return;
   try {
     var anim = gfxMotion() && R.background === 'animated';
-    if (R.lighting === 'lamp') {
+    var baked = bakedLight();
+    if (R.lighting === 'lamp' && !baked) {
       Fx.drawMoonWash(ctx, w, h, anim ? t : 0);
       Fx.drawLampPool(ctx, lamp[0], lamp[1], lamp[2], anim ? Fx.flicker(t) : 0.6, R);
     }
     Fx.drawParticles(ctx, particles, w, h, R);
-    if (R.grade === 'on') Fx.drawVignette(ctx, w, h, 0.5);
+    if (R.grade === 'on' && !baked) Fx.drawVignette(ctx, w, h, 0.5);
   } catch (_) {
     fxFailed = true;   // render without effects from now on; the Graphics panel says so
     refreshGfxPanel();
@@ -719,8 +741,9 @@ function drawTable(tNow) {
   if (!fit) return;
   var ctx = fit.ctx, w = fit.w, h = fit.h;
   var t = (tNow || performance.now()) / 1000;
-  paintBase(ctx, w, h, fit.bw, fit.bh);
-  paintAtmosphere(ctx, w, h, t, tableParticles, [w / 2, h * 0.47, Math.max(w, h) * 0.55]);
+  var lamp = [w / 2, h * 0.47, Math.max(w, h) * 0.55];
+  paintBase(ctx, w, h, fit.bw, fit.bh, lamp);
+  paintAtmosphere(ctx, w, h, t, tableParticles, lamp);
   if (!sess.game) return;
   var g = sess.game;
   var Rx = effectsOn() ? R : Gfx.resolve({ preset: 'low' });
@@ -795,7 +818,7 @@ function drawTitleFx(tNow) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = 0.28;
-      ctx.drawImage(Fx.glowSprite('200,220,255'), ox + KEYART.moon[0] * s - mr, oy + KEYART.moon[1] * s - mr, mr * 2, mr * 2);
+      ctx.drawImage(Fx.glowSprite('200,220,255', R.budget.glowSprite), ox + KEYART.moon[0] * s - mr, oy + KEYART.moon[1] * s - mr, mr * 2, mr * 2);
       ctx.restore();
     }
     if (R.lighting === 'lamp') Fx.drawLampPool(ctx, lamp[0], lamp[1], lamp[2], anim ? Fx.flicker(t) : 0.6, R, true);
@@ -857,7 +880,7 @@ function renderFps() {
 // Apply the saved graphics settings live: body/canvas attributes and classes
 // for the DOM side (hand cards, title glow), canvas repaint, loop start/stop.
 function applyGraphics() {
-  R = Gfx.resolve(settings.gfx, detectedPreset);
+  R = Gfx.resolve(settings.gfx, detectedPreset, gpuLevel);
   if (!R.adaptive) adaptiveScale = 1;
   syncParticles();
   baseLayer = null;
@@ -960,7 +983,7 @@ function refreshGfxSummary() {
   var ratio = gfxPixelRatio();
   var px = [Math.round(window.innerWidth * ratio), Math.round(window.innerHeight * ratio)];
   var shown = effectsOn() ? R : Gfx.resolve({ preset: 'low' });
-  el.textContent = (gpuName || gt('gpuUnknown')) + ' · ' + Gfx.describe(shown, px, gfxLocale);
+  el.textContent = [gpuName || gt('gpuUnknown'), gt('level', { n: gpuLevel }), Gfx.describe(shown, px, gfxLocale)].join(' · ');
 }
 
 function syncUI() {

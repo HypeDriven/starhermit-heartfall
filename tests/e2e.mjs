@@ -321,6 +321,7 @@ async function runPass(vpName, contextOptions) {
       await page.selectOption('#gfx-preset', 'high');
       st = await gfxState();
       if (st.body !== 'high' || !/medium shadows/.test(st.summary)) throw new Error('high not applied: ' + JSON.stringify(st));
+      if (!/ · Level 0 · /.test(st.summary)) throw new Error('summary lacks the hardware level: ' + st.summary);
       await page.locator('#gfx-cat-shadows').scrollIntoViewIfNeeded();
       await page.selectOption('#gfx-cat-shadows', 'off');
       st = await gfxState();

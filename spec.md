@@ -35,7 +35,8 @@ burns out — unless you can take *every* penalty and turn the night inside out.
 | `js/content.js` | `HFContent`: themes, 40 Journey stages, 6 Challenges, 3 Practice presets, the daily generator, 6 Learn lessons, achievement definitions |
 | `starhermit-sdk.js` | Shared StarHermit client (`window.StarHermit`), an unmodified copy of `tools/starhermit-sdk.js` |
 | `js/platform.js` | `HFPlatform`: StarHermit adapter over the SDK — sign-in, nickname/avatar, cloud save, settings KV, key bindings, invite link, sync status; inert without a token |
-| `js/gfx.js` | `HFGfx`: pure graphics quality model — presets, categories, `detectPreset`, `resolve`, `choosePreset`, `presetTier`, `describe`, `adaptStep`, `pixelRatio`, and the Graphics panel strings in all nine locales |
+| `js/gpu-level.js` | Shared StarHermit hardware-level module (`window.StarHermitGpu`, loaded before `js/gfx.js`), copied from the platform tools, never edited here |
+| `js/gfx.js` | `HFGfx`: pure graphics quality model — presets, categories, hardware-level detection (`detectLevel`, `presetForLevel`, `detectPreset`), per-preset `BUDGETS`/`budgetFor`, `resolve`, `choosePreset`, `presetTier`, `describe`, `adaptStep`, `pixelRatio`, and the Graphics panel strings in all nine locales |
 | `js/tablefx.js` | `HFTableFx`: 2D canvas effect passes — GPU probe, lamp pool, moonlight wash, glow sprites (bloom), fireflies, vignette, detailed card faces, seat-label pills |
 | `js/game.js` | `HFGame`: DOM wiring, screen navigation, session loop, AI pump, audio, canvas painting, graphics application + animation loop + Graphics panel, results, local achievements, platform chip/adoption |
 | `js/three.min.js`, `vendor/three.module.min.js` | three.js r160 (MIT). Loaded but not used for rendering — see Known limitations |
@@ -355,7 +356,8 @@ it stops under `Settings → Reduced motion` or the OS `prefers-reduced-motion` 
 drawn once, still, with fireflies frozen in place).
 
 **Graphics.** The table is a layered 2D canvas: the painted plate (optionally colour-graded with
-contrast/saturation via `ctx.filter`, cached in an offscreen layer) under the legibility scrim,
+contrast/saturation via `ctx.filter`) under the legibility scrim, always cached in an offscreen layer
+at the backing-store size and blitted each frame,
 then a warm lamp pool over the table centre and a cool moonlight wash from the upper left
 (additive), drifting fireflies/moon motes (seeded, additive, with pre-blurred glow sprites when
 bloom is on), a vignette, and on top the seat labels (dark pill backdrop when detailed, drop
@@ -365,22 +367,51 @@ tier). The title screen gets its own effects canvas over the key art: a flickeri
 painted oil lamp, a moon halo, fireflies and a vignette; it is hidden and never drawn when those
 effects are off. DOM hand cards follow the same tiers (paper gradient, gilt inset, sheen and
 shadow depth), and bloom adds a warm halo to the wordmark and the active score.
-The Settings screen's **Graphics** section offers a quality preset (Auto — chosen from the WebGL
-unmasked renderer string, software renderers get Low, discrete GPUs and Apple M get High, others
-Balanced, capped at Balanced on touch/mobile devices; Low; Balanced; High; Ultra), a render scale
+The Settings screen's **Graphics** section offers a quality preset (Auto — chosen from the StarHermit
+hardware level below; Low; Balanced; High; Ultra), a render scale
 (50–200 % of the preset's; the canvas backing store is `min(dpr, cap) × preset scale × render
 scale × adaptive`, cap 1 at Low, 1.5 at Balanced, 2 at High/Ultra, Ultra ×1.25), one override per
 effect — Shadows (off/low/medium/high), Lighting (flat/lamplight), Bloom, Colour grade & vignette,
-Fireflies (off/low 18/high 48), Ambient motion (still/animated), Card detail (plain/detailed) —
+Fireflies (off / low = 37.5 % of the preset's firefly budget / high = all of it), Ambient motion (still/animated), Card detail (plain/detailed) —
 each defaulting to "From preset (…)", adaptive resolution (over ~90 frames, a >26 ms average
 frame steps the scale down 0.1 to 0.6; cheap frames step it back up 0.05 to 1) and a frame-rate
 readout (top-left under the round line in play, bottom-left elsewhere, never intercepting input),
-plus a summary line "GPU · effects · W×H px". Choosing a preset clears overrides; changes apply
+plus a summary line "GPU · Level N · effects · W×H px" ("Level" localized). Choosing a preset clears overrides; changes apply
 immediately without reload and persist in `hf-settings-v1.gfx`. The per-frame loop runs only when
 fireflies or ambient motion are on, the table or title is visible and the tab is shown; Low draws
 exactly the original single plate + scrim + flat cards at 1× on state changes only. If an effect
 pass throws (or the browser lacks `ctx.filter` for the grade) the table is drawn without it and
 the panel says so. `body` and `#game-canvas` carry `data-gfx-preset`.
+
+**Hardware-level detection.** `js/gpu-level.js` (shared StarHermit copy, `window.StarHermitGpu`) rates
+the WebGL unmasked renderer plus device facts (`detectSystem()`) on the StarHermit hardware level 0–20
+(0 = Galaxy S20 / Intel UHD or weaker, every software renderer and no WebGL; 20 = RTX 5090; each level
+≈ 1.23×; laptop parts two levels below desktop; phones, tablets and ≤ 4 GB machines capped at 9).
+`gfx.js` maps it with `presetForLevel(level, { low: 0, balanced: 4, high: 10, ultra: 17 })`, so Auto
+picks Ultra on strong GPUs; adaptive resolution still steps down when slow. Headless SwiftShader is
+level 0 → Low. Phones and tablets pace Auto FPS at half the display refresh rate ("Auto (half refresh
+rate)") and start at 16 simultaneous sounds (shared `game-options.js`).
+
+**Per-preset budgets** (`BUDGETS` / `budgetFor` in `js/gfx.js`; each preset holds 60 FPS on the weakest
+GPU Auto gives it — Low at level 0, Balanced 4, High 10, Ultra 17). The firefly count is tuned at the
+floor level and scales up within the preset on faster GPUs (`StarHermitGpu.scaleBudget`, ≤ 4×, at most
+160).
+
+| Budget | Low | Balanced | High | Ultra |
+|---|---|---|---|---|
+| Fireflies at Fireflies "high" (floor level) | 24 | 36 | 48 | 64 |
+| Glow-sprite size (bloom halos) | 32 px | 64 px | 64 px | 128 px |
+| Gold glow on the active seat's name (with bloom) | no | no | yes | yes |
+| Card drop-shadow blur cap | 4 px | 6 px | 12 px | 16 px |
+| Lamp pool, moonlight and vignette baked into the cached plate (when not flickering) | yes | yes | no (drawn per frame) | no |
+
+**Benchmark** (`node tools/gfx-bench.mjs heartfall`; hook `tests/gfx-bench.mjs` picks the preset in
+Settings → Graphics and plays a Practice match through the visible hand and Pass buttons, pressing Play
+again at the results). This is a 2D-canvas game, so the gate judges CPU time per frame. Measured
+2026-10-17:
+
+- Desktop 1920×1080: PASS low (idle — Low repaints only on change); PASS balanced (CPU p90 0.70 ms); PASS high (CPU 0.90 ms); PASS ultra (CPU 1.10 ms). The page's WebGL probe context also yields a GPU timer: every preset is 0.00 ms typical / slow above the draws-skipped floor.
+- Mobile 390×844 @3×: PASS low (idle); PASS balanced (CPU p90 0.60 ms; 0.06 / 0.00 ms GPU above the floor).
 
 **The hero** is your hand; the plate, the scrim and the score row are deliberately lower contrast
 so the 13 cards you are choosing between read first.
@@ -607,8 +638,10 @@ press. It fails on any `pageerror` or non-allowlisted `console.error`.
 ## 14. Testing and acceptance criteria
 
 **`npm test`** = `tests/rules-sanity.mjs` + `tests/lesson-check.mjs` + `node --test
-tests/gfx.test.mjs`, zero dependencies. *gfx* covers `detectPreset` on sample GPU strings
-(SwiftShader/llvmpipe → Low, GeForce/Apple M → High, Intel/Adreno → Balanced, mobile cap),
+tests/gfx.test.mjs`, zero dependencies. *gfx* covers hardware level → preset
+(SwiftShader/llvmpipe/no WebGL, AMD Radeon Graphics and Intel UHD → Low, Iris Xe → Balanced, GTX 1070 →
+High, RTX 4080/5090 → Ultra; phones such as Adreno 740 capped at Balanced), the per-preset budget
+table (explicit, non-decreasing, floor-level tuned, scaling with the level, card-shadow cap),
 `resolve` with preset / override / invalid tier / render-scale clamp, `choosePreset` clearing
 overrides, the adaptive step and pixel ratio, `describe`, and that every panel string exists in
 all nine locales. *platform* loads the SDK and `js/platform.js` against a stubbed fetch: token
@@ -635,7 +668,8 @@ cards and the real Pass button → results overlay with a headline and one score
 Play again → pause → Leave to title → Daily and Journey sub-menus open and close → Practice
 (Hint toast, pass, Undo restores the pre-pass state, re-pass, play) → Learn lesson 1 applies its
 fixture, completes on the forced play, persists progress, and Next lesson starts lesson 2 →
-Settings → Graphics: Low then High applied (`data-gfx-preset` on body and canvas, summary text),
+Settings → Graphics: Low then High applied (`data-gfx-preset` on body and canvas, summary text with
+"Level 0"),
 a Shadows override applied and saved, the panel fits the viewport width, reload restores preset
 and override, Ultra clears the override, frame-rate readout toggles, a Practice table renders at
 Ultra and at Low (Low at 1× backing store) → StarHermit: standalone makes no `/api/v1` request and

@@ -31,27 +31,69 @@ var TABLE = {
 
 // Blur radius (CSS px) of card shadows per tier.
 var SHADOW_BLUR = { off: 0, low: 4, medium: 9, high: 16 };
-var PARTICLE_COUNT = { off: 0, low: 18, high: 48 };
+// Share of the preset's firefly budget drawn per Fireflies tier.
+var PARTICLE_SHARE = { off: 0, low: 0.375, high: 1 };
 
 function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
 
-/** Best preset for this GPU, from the unmasked renderer string. */
-function detectPreset(gpu, opts) {
-  var g = String(gpu || '').toLowerCase();
-  var mobile = !!(opts && opts.mobile);
-  var tier;
-  if (!g || /swiftshader|llvmpipe|softpipe|software|basic render|microsoft basic/.test(g)) tier = 'low';
-  else if (/nvidia|geforce|rtx|gtx|quadro|radeon rx|radeon pro|amd radeon(?!.*graphics)|apple m\d/.test(g)) tier = 'high';
-  else tier = 'balanced';
-  if (mobile && tier === 'high') tier = 'balanced';
-  return tier;
+// Auto picks the preset from the StarHermit hardware level (0 = Galaxy S20 / Intel UHD or weaker, 20 = RTX
+// 5090; js/gpu-level.js → window.StarHermitGpu): Low from 0, Balanced from 4, High from 10, Ultra from 17.
+// Phones, tablets and ≤ 4 GB machines are capped at level 9 (Balanced); no WebGL or a software renderer is 0.
+var LEVELS = { low: 0, balanced: 4, high: 10, ultra: 17 };
+function gpuApi() { return (typeof globalThis !== 'undefined' ? globalThis : this).StarHermitGpu; }
+
+/** Hardware level (0–20) for an unmasked renderer string plus StarHermitGpu.detectSystem() facts. */
+function detectLevel(gpu, system) {
+  var G = gpuApi();
+  var sys = Object.assign({ webgl: true, webgl2: true }, system || {}, { gpu: String(gpu || '') });
+  if (!gpu) sys.webgl = false; // no WebGL at all
+  return G ? G.detectLevel(sys) : (gpu ? LEVELS.balanced : 0);
+}
+
+/** The preset Auto starts from for a hardware level. */
+function presetForLevel(level) {
+  var G = gpuApi();
+  if (G) return G.presetForLevel(level, LEVELS);
+  return level >= 17 ? 'ultra' : level >= 10 ? 'high' : level >= 4 ? 'balanced' : 'low';
+}
+
+/** Best preset for this GPU (the hardware level already caps phones/tablets at Balanced). */
+function detectPreset(gpu, system) {
+  return presetForLevel(detectLevel(gpu, system));
+}
+
+/*
+ * Per-preset budget for the 2D table. Each preset holds 60 FPS on the weakest GPU Auto gives it (Low →
+ * level 0, Balanced → 4, High → 10, Ultra → 17; measured with tests/gfx-bench.mjs). Gameplay is identical.
+ *   fireflies   fireflies / moon motes at Fireflies "high", at the floor level ("low" draws 37.5 %)
+ *   glowSprite  size (px) of the pre-blurred glow sprite used for bloom halos
+ *   labelGlow   blurred gold glow on the active seat's name (else a plain drop shadow)
+ *   cardShadow  cap on the card drop-shadow blur (CSS px)
+ *   bakeLight   lamp pool, moonlight and vignette painted once into the cached table layer when the
+ *               scene is still (otherwise they are drawn every frame so the lamp can flicker)
+ */
+var BUDGETS = {
+  low:      { fireflies: 24, glowSprite: 32,  labelGlow: false, cardShadow: 4,  bakeLight: true },
+  balanced: { fireflies: 36, glowSprite: 64,  labelGlow: false, cardShadow: 6,  bakeLight: true },
+  high:     { fireflies: 48, glowSprite: 64,  labelGlow: true,  cardShadow: 12, bakeLight: false },
+  ultra:    { fireflies: 64, glowSprite: 128, labelGlow: true,  cardShadow: 16, bakeLight: false }
+};
+var FIREFLY_MAX = 160;
+
+/** A preset's concrete budget for a hardware level (the firefly count scales ≤ 4× within the preset). */
+function budgetFor(preset, level) {
+  var b = Object.assign({}, BUDGETS[preset] || BUDGETS.balanced);
+  var G = gpuApi(), floor = LEVELS[preset] || 0;
+  var lv = Math.max(isFinite(level) && level !== null ? Number(level) : floor, floor);
+  b.fireflies = Math.min(FIREFLY_MAX, Math.round(b.fireflies * (G ? G.scaleBudget(1, lv, floor) : 1)));
+  return b;
 }
 
 /**
  * Resolve saved settings into concrete tiers.
  * saved: { preset: 'auto'|preset, render_scale, adaptive, show_fps, <category>: 'preset'|tier }
  */
-function resolve(saved, detected) {
+function resolve(saved, detected, level) {
   var s = saved || {};
   var auto = PRESETS.indexOf(s.preset) < 0;
   var preset = auto ? (PRESETS.indexOf(detected) >= 0 ? detected : 'balanced') : s.preset;
@@ -68,8 +110,10 @@ function resolve(saved, detected) {
   });
   out.adaptive = s.adaptive !== false;
   out.showFps = !!s.show_fps;
-  out.shadowBlur = SHADOW_BLUR[out.shadows];
-  out.particleCount = PARTICLE_COUNT[out.particles];
+  out.level = isFinite(level) && level !== null ? Number(level) : LEVELS[preset];
+  out.budget = budgetFor(preset, out.level);
+  out.shadowBlur = Math.min(SHADOW_BLUR[out.shadows], out.budget.cardShadow);
+  out.particleCount = out.particles === 'high' ? out.budget.fireflies : out.particles === 'low' ? Math.round(out.budget.fireflies * PARTICLE_SHARE.low) : 0;
   // Effects that need the per-frame loop; with none of them the table repaints only on change.
   out.animated = out.background === 'animated' || out.particles !== 'off';
   return out;
@@ -114,7 +158,7 @@ var S = {
     'sum.noShadows': 'no shadows', 'sum.shadows': '{tier} shadows', 'sum.lamp': 'lamplight',
     'sum.bloom': 'bloom', 'sum.grade': 'grade', 'sum.particles': '{n} fireflies',
     'sum.animated': 'animated', 'sum.still': 'still',
-    gpuUnknown: 'Unknown GPU', postNote: 'Some effects are unavailable in this browser; the table is drawn without them.',
+    gpuUnknown: 'Unknown GPU', level: 'Level {n}', postNote: 'Some effects are unavailable in this browser; the table is drawn without them.',
     fps: '{n} fps', fpsStatic: 'still'
   },
   'en-GB': {
@@ -138,7 +182,7 @@ var S = {
     'sum.noShadows': 'sin sombras', 'sum.shadows': 'sombras {tier}', 'sum.lamp': 'luz de lámpara',
     'sum.bloom': 'resplandor', 'sum.grade': 'color', 'sum.particles': '{n} luciérnagas',
     'sum.animated': 'animado', 'sum.still': 'quieto',
-    gpuUnknown: 'GPU desconocida', postNote: 'Algunos efectos no están disponibles en este navegador; la mesa se dibuja sin ellos.',
+    gpuUnknown: 'GPU desconocida', level: 'Nivel {n}', postNote: 'Algunos efectos no están disponibles en este navegador; la mesa se dibuja sin ellos.',
     fps: '{n} fps', fpsStatic: 'quieto'
   },
   'es-ES': {
@@ -162,7 +206,7 @@ var S = {
     'sum.noShadows': 'keine Schatten', 'sum.shadows': 'Schatten {tier}', 'sum.lamp': 'Lampenlicht',
     'sum.bloom': 'Leuchten', 'sum.grade': 'Farbkorrektur', 'sum.particles': '{n} Glühwürmchen',
     'sum.animated': 'animiert', 'sum.still': 'ruhig',
-    gpuUnknown: 'Unbekannte GPU', postNote: 'Einige Effekte sind in diesem Browser nicht verfügbar; der Tisch wird ohne sie gezeichnet.',
+    gpuUnknown: 'Unbekannte GPU', level: 'Stufe {n}', postNote: 'Einige Effekte sind in diesem Browser nicht verfügbar; der Tisch wird ohne sie gezeichnet.',
     fps: '{n} fps', fpsStatic: 'ruhig'
   },
   'fr-FR': {
@@ -181,7 +225,7 @@ var S = {
     'sum.noShadows': 'sans ombres', 'sum.shadows': 'ombres {tier}', 'sum.lamp': 'lumière de lampe',
     'sum.bloom': 'halo', 'sum.grade': 'étalonnage', 'sum.particles': '{n} lucioles',
     'sum.animated': 'animé', 'sum.still': 'immobile',
-    gpuUnknown: 'GPU inconnu', postNote: 'Certains effets ne sont pas disponibles dans ce navigateur ; la table est dessinée sans eux.',
+    gpuUnknown: 'GPU inconnu', level: 'Niveau {n}', postNote: 'Certains effets ne sont pas disponibles dans ce navigateur ; la table est dessinée sans eux.',
     fps: '{n} i/s', fpsStatic: 'immobile'
   },
   'fr-CA': {
@@ -205,7 +249,7 @@ var S = {
     'sum.noShadows': 'sem sombras', 'sum.shadows': 'sombras {tier}', 'sum.lamp': 'luz do lampião',
     'sum.bloom': 'brilho', 'sum.grade': 'cor', 'sum.particles': '{n} vaga-lumes',
     'sum.animated': 'animado', 'sum.still': 'parado',
-    gpuUnknown: 'GPU desconhecida', postNote: 'Alguns efeitos não estão disponíveis neste navegador; a mesa é desenhada sem eles.',
+    gpuUnknown: 'GPU desconhecida', level: 'Nível {n}', postNote: 'Alguns efeitos não estão disponíveis neste navegador; a mesa é desenhada sem eles.',
     fps: '{n} fps', fpsStatic: 'parado'
   },
   'it-IT': {
@@ -224,7 +268,7 @@ var S = {
     'sum.noShadows': 'senza ombre', 'sum.shadows': 'ombre {tier}', 'sum.lamp': 'luce di lampada',
     'sum.bloom': 'bagliore', 'sum.grade': 'colore', 'sum.particles': '{n} lucciole',
     'sum.animated': 'animato', 'sum.still': 'fermo',
-    gpuUnknown: 'GPU sconosciuta', postNote: 'Alcuni effetti non sono disponibili in questo browser; il tavolo viene disegnato senza di essi.',
+    gpuUnknown: 'GPU sconosciuta', level: 'Livello {n}', postNote: 'Alcuni effetti non sono disponibili in questo browser; il tavolo viene disegnato senza di essi.',
     fps: '{n} fps', fpsStatic: 'fermo'
   }
 };
@@ -292,6 +336,7 @@ function pixelRatio(r, dpr, adaptive) {
 
 return {
   PRESETS: PRESETS, CATEGORIES: CATEGORIES, LOCALES: LOCALES, STRINGS: S,
+  LEVELS: LEVELS, BUDGETS: BUDGETS, detectLevel: detectLevel, presetForLevel: presetForLevel, budgetFor: budgetFor,
   detectPreset: detectPreset, resolve: resolve, choosePreset: choosePreset,
   presetTier: presetTier, fromLegacyQuality: fromLegacyQuality,
   describe: describe, adaptStep: adaptStep, pixelRatio: pixelRatio,

@@ -40,12 +40,15 @@ function supportsFilter() {
 }
 
 // ---------- glow sprites (cheap bloom: pre-blurred radial sprites drawn additively) ----------
+// Sprite size follows the graphics budget (R.budget.glowSprite: 32–128 px).
 var spriteCache = {};
-function glowSprite(rgb) {
-  if (spriteCache[rgb]) return spriteCache[rgb];
+function glowSprite(rgb, size) {
+  var n = size || 64, key = rgb + '@' + n;
+  if (spriteCache[key]) return spriteCache[key];
   var c = document.createElement('canvas');
-  c.width = c.height = 64;
+  c.width = c.height = n;
   var g = c.getContext('2d');
+  g.scale(n / 64, n / 64);
   var grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
   grd.addColorStop(0, 'rgba(' + rgb + ',1)');
   grd.addColorStop(0.18, 'rgba(' + rgb + ',0.75)');
@@ -53,7 +56,7 @@ function glowSprite(rgb) {
   grd.addColorStop(1, 'rgba(' + rgb + ',0)');
   g.fillStyle = grd;
   g.fillRect(0, 0, 64, 64);
-  spriteCache[rgb] = c;
+  spriteCache[key] = c;
   return c;
 }
 
@@ -96,7 +99,7 @@ function drawParticles(ctx, ps, w, h, R) {
     if (R.bloom === 'on') {
       var r = p.size * 7;
       ctx.globalAlpha = a * 0.55;
-      ctx.drawImage(glowSprite(p.rgb), x - r, y - r, r * 2, r * 2);
+      ctx.drawImage(glowSprite(p.rgb, R.budget && R.budget.glowSprite), x - r, y - r, r * 2, r * 2);
     }
     ctx.globalAlpha = a;
     ctx.fillStyle = 'rgba(' + p.rgb + ',0.95)';
@@ -121,7 +124,7 @@ function drawLampPool(ctx, lx, ly, r, flicker, R, flame) {
   if (flame && R.bloom === 'on') {
     var br = r * 0.16 * k;
     ctx.globalAlpha = 0.55 * k;
-    ctx.drawImage(glowSprite('255,214,150'), lx - br, ly - br, br * 2, br * 2);
+    ctx.drawImage(glowSprite('255,214,150', R.budget && R.budget.glowSprite), lx - br, ly - br, br * 2, br * 2);
   }
   ctx.restore();
 }
@@ -231,7 +234,7 @@ function drawLabel(ctx, text, x, y, active, R) {
     ctx.fill();
     if (active) { ctx.strokeStyle = 'rgba(247,201,72,0.7)'; ctx.lineWidth = 1; ctx.stroke(); }
   }
-  if (active && R.bloom === 'on') {
+  if (active && R.bloom === 'on' && (!R.budget || R.budget.labelGlow)) {
     ctx.shadowColor = 'rgba(247,201,72,0.85)'; ctx.shadowBlur = 12;
   } else if (R.shadows !== 'off') {
     ctx.shadowColor = 'rgba(0,0,0,0.85)'; ctx.shadowBlur = 4; ctx.shadowOffsetY = 1;
