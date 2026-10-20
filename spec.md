@@ -513,7 +513,9 @@ Moth, Luna, Pip) are not translated; card faces are rank glyphs plus suit symbol
 * **Keyboard-only path.** Every control is a real `<button>` or a `tabIndex=0` `role="button"`
   list item, so Tab reaches all of them in document order and Enter/Space activates them. Hand
   cards handle Enter and Space explicitly (`#hand` keydown). `Escape` pauses, `H` hints, `U`
-  undoes. The full flow title → mode → stage → pass → play → results → leave is reachable without
+  undoes. The hand and the action buttons are updated in place after every AI play and rebuilt
+  only when their cards or buttons change, so a click pressed while the AI plays still lands on
+  its card or button and keyboard focus stays where it was. The full flow title → mode → stage → pass → play → results → leave is reachable without
   a pointer.
 * **Focus.** `:focus-visible` gives buttons and list items a 2 px `#8fb4ff` outline and cards a
   3 px white outline, both against dark grounds.

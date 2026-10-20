@@ -550,36 +550,46 @@ function renderScores() {
   box.appendChild(row);
 }
 
+// The hand and the action buttons are updated in place and rebuilt only when
+// their cards or buttons change: syncUI runs after every AI play (450 ms), and
+// a click only fires when press and release land on the same element, so a
+// rebuild mid-press lost the click (and keyboard focus on a card).
 function renderHand() {
   var g = sess.game, ul = $('hand');
-  ul.innerHTML = '';
+  var cards = g.hands[0];
   var legal = (g.phase === 'play' && g.actor === 0) ? Rules.legalPlays(g, 0) : [];
-  g.hands[0].forEach(function (c) {
-    var li = document.createElement('li');
-    li.textContent = cardLabel(c);
-    li.dataset.card = c;
-    li.className = 'card';
-    li.tabIndex = 0;
-    li.setAttribute('role', 'button');
-    if (isPenaltyCard(c)) li.classList.add('penalty');
-    if (sess.passSel.indexOf(c) >= 0) li.classList.add('sel');
-    if (sess.hintCard === c) li.classList.add('hint');
-    if (g.phase === 'play' && g.actor === 0 && legal.indexOf(c) < 0) li.classList.add('dim');
-    ul.appendChild(li);
+  var same = ul.children.length === cards.length && cards.every(function (c, i) {
+    return Number(ul.children[i].dataset.card) === c;
+  });
+  if (!same) {
+    ul.innerHTML = '';
+    cards.forEach(function (c) {
+      var li = document.createElement('li');
+      li.dataset.card = c;
+      li.tabIndex = 0;
+      li.setAttribute('role', 'button');
+      ul.appendChild(li);
+    });
+  }
+  cards.forEach(function (c, i) {
+    var li = ul.children[i];
+    var label = cardLabel(c);
+    if (li.textContent !== label) li.textContent = label;
+    var cls = 'card' + (isPenaltyCard(c) ? ' penalty' : '') +
+      (sess.passSel.indexOf(c) >= 0 ? ' sel' : '') +
+      (sess.hintCard === c ? ' hint' : '') +
+      (g.phase === 'play' && g.actor === 0 && legal.indexOf(c) < 0 ? ' dim' : '');
+    if (li.className !== cls) li.className = cls;
   });
 }
 
 function renderActions() {
   var g = sess.game, box = $('actions');
-  box.innerHTML = '';
-  function btn(label, cls, fn) {
-    var b = document.createElement('button');
-    b.textContent = label; if (cls) b.className = cls;
-    b.addEventListener('click', fn);
-    box.appendChild(b);
-  }
+  var want = [];
+  function btn(label, cls, fn) { want.push({ label: label, cls: cls, fn: fn }); }
   if (g.phase === 'pass' && !g.passes[0]) {
     btn(T('Pass {n}/{total}', { n: sess.passSel.length, total: g.cfg.passCount }), 'primary', function () {
+      var g = sess.game;
       if (sess.passSel.length !== g.cfg.passCount) { playSfx('invalid'); toast(T('Select {n} cards to pass.', { n: g.cfg.passCount })); return; }
       var reason = Rules.checkPass(g, 0, sess.passSel);
       if (reason) { playSfx('invalid'); toast(reasonText(reason)); return; }
@@ -596,6 +606,16 @@ function renderActions() {
     btn(T('Hint'), '', doHint);
     btn(T('Undo'), '', doUndo);
   }
+  var sig = JSON.stringify(want.map(function (w) { return [w.label, w.cls]; }));
+  if (box.dataset.sig === sig) return;
+  box.dataset.sig = sig;
+  box.innerHTML = '';
+  want.forEach(function (w) {
+    var b = document.createElement('button');
+    b.textContent = w.label; if (w.cls) b.className = w.cls;
+    b.addEventListener('click', w.fn);
+    box.appendChild(b);
+  });
 }
 
 function seatPos(i, n, w, h) {
