@@ -85,13 +85,26 @@ function show(name: ScreenName, focus: string | null = null): void {
   if (name !== "play") toastState.text = null; // no stale toasts over menus
   ui.setFocus(null);
 }
+/** The widget a screen focuses when it opens (its first choice), for keyboard and gamepad players. */
+function firstFocus(name: ScreenName): string | null {
+  switch (name) {
+    case "modes": return "mode-learn";
+    case "learn": return "row-t1";
+    case "journey": return "row-j01";
+    case "daily": return `row-${dailyDates()[0]}`;
+    case "practice": return "row-casual";
+    case "challenge": return "row-c1";
+    default: return null;
+  }
+}
 export function navTo(name: ScreenName): void {
   if (app.screen !== name) navStack.push(app.screen);
-  show(name);
+  show(name, firstFocus(name));
 }
 export function navBack(): void {
   audio.play("ui-back");
-  show(navStack.pop() ?? "title");
+  const to = navStack.pop() ?? "title";
+  show(to, to === "title" ? "btn-play" : firstFocus(to));
 }
 
 // ------------------------------------------------------------------ dailies
