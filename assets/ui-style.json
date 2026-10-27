@@ -1,0 +1,354 @@
+{
+  "styles": {
+    ".body": {
+      "text": {
+        "color": "$text",
+        "size": 16
+      }
+    },
+    ".lead": {
+      "text": {
+        "color": "$dim",
+        "size": 16
+      }
+    },
+    ".game-title": {
+      "text": {
+        "color": "#ffffff",
+        "size": 48,
+        "weight": "600",
+        "letterSpacing": 0.5,
+        "shadow": {
+          "y": 3,
+          "blur": 18,
+          "color": "#000000d9"
+        }
+      }
+    },
+    ".tagline": {
+      "text": {
+        "color": "$dim",
+        "size": 16,
+        "shadow": {
+          "y": 2,
+          "blur": 10,
+          "color": "#000000d9"
+        }
+      }
+    },
+    ".player-chip": {
+      "text": {
+        "color": "$dim",
+        "size": 14,
+        "shadow": {
+          "y": 2,
+          "blur": 10,
+          "color": "#000000d9"
+        }
+      }
+    },
+    ".h2": {
+      "text": {
+        "color": "$text",
+        "size": 24,
+        "weight": "600",
+        "letterSpacing": 0.5
+      }
+    },
+    ".obj-title": {
+      "text": {
+        "color": "$text",
+        "size": 24,
+        "weight": "600",
+        "letterSpacing": 0.5
+      }
+    },
+    ".objective": {
+      "text": {
+        "color": "#cfe0ff",
+        "size": 16
+      }
+    },
+    ".score": {
+      "text": {
+        "color": "$text",
+        "size": 16
+      }
+    },
+    ".score-turn": {
+      "text": {
+        "color": "#f7c948",
+        "size": 16
+      }
+    },
+    ".round-line": {
+      "text": {
+        "color": "#cfe0ff",
+        "size": 13
+      }
+    },
+    ".btn": {
+      "background": "#233a6b",
+      "radius": 0,
+      "padding": {
+        "top": 9,
+        "end": 14,
+        "bottom": 9,
+        "start": 14
+      },
+      "text": {
+        "color": "#eaf1ff",
+        "size": 15,
+        "align": "center"
+      },
+      "hovered": {
+        "background": "#2b4680"
+      },
+      "pressed": {
+        "background": "#1d3159"
+      }
+    },
+    ".btn-big": {
+      "background": "#2f6fd0",
+      "radius": 0,
+      "padding": 13,
+      "text": {
+        "color": "#ffffff",
+        "size": 18,
+        "align": "center"
+      },
+      "hovered": {
+        "background": "#3a7ade"
+      },
+      "pressed": {
+        "background": "#2862bb"
+      }
+    },
+    ".btn-act": {
+      "background": "#233a6b",
+      "radius": 0,
+      "padding": {
+        "top": 9,
+        "end": 20,
+        "bottom": 9,
+        "start": 20
+      },
+      "text": {
+        "color": "#eaf1ff",
+        "size": 15,
+        "align": "center"
+      },
+      "hovered": {
+        "background": "#2b4680"
+      }
+    },
+    ".btn-primary": {
+      "background": "#2f6fd0",
+      "radius": 0,
+      "padding": {
+        "top": 9,
+        "end": 20,
+        "bottom": 9,
+        "start": 20
+      },
+      "text": {
+        "color": "#ffffff",
+        "size": 15,
+        "align": "center"
+      },
+      "hovered": {
+        "background": "#3a7ade"
+      }
+    },
+    ".btn-back": {
+      "background": "#3a4f7d",
+      "radius": 0,
+      "padding": 0,
+      "text": {
+        "color": "#eaf1ff",
+        "size": 20,
+        "align": "center"
+      },
+      "hovered": {
+        "background": "#4a6191"
+      }
+    },
+    ".btn-pause": {
+      "background": "#3a4f7d",
+      "radius": 0,
+      "padding": 0,
+      "text": {
+        "color": "#eaf1ff",
+        "size": 15,
+        "align": "center"
+      },
+      "hovered": {
+        "background": "#4a6191"
+      }
+    },
+    ".mode-card": {
+      "background": "#2f6fd0",
+      "radius": 0,
+      "padding": 14,
+      "text": {
+        "color": "#ffffff",
+        "size": 18,
+        "align": "start"
+      },
+      "hovered": {
+        "background": "#3a7ade"
+      }
+    },
+    ".mode-name": {
+      "text": {
+        "color": "#ffffff",
+        "size": 18
+      }
+    },
+    ".mode-desc": {
+      "text": {
+        "color": "#e4eeff",
+        "size": 16
+      }
+    },
+    ".list-row": {
+      "background": "#00000000",
+      "border": {
+        "width": {
+          "top": 1
+        },
+        "color": {
+          "top": "$line"
+        },
+        "style": "solid"
+      },
+      "radius": 0,
+      "padding": {
+        "top": 9,
+        "end": 4,
+        "bottom": 9,
+        "start": 4
+      },
+      "text": {
+        "color": "$text",
+        "size": 16,
+        "align": "start"
+      },
+      "hovered": {
+        "background": "#18264a"
+      }
+    },
+    ".list-name": {
+      "text": {
+        "color": "$text",
+        "size": 16
+      }
+    },
+    ".list-done": {
+      "text": {
+        "color": "#7fd8a0",
+        "size": 16,
+        "weight": "700"
+      }
+    },
+    ".toast": {
+      "background": "#3a2f5e",
+      "padding": {
+        "top": 8,
+        "end": 18,
+        "bottom": 8,
+        "start": 18
+      },
+      "text": {
+        "color": "#ffffff"
+      }
+    },
+    ".toast-text": {
+      "text": {
+        "color": "#ffffff",
+        "size": 16
+      }
+    },
+    ".account-toast": {
+      "background": "#3a2f5e",
+      "radius": 10,
+      "padding": {
+        "top": 8,
+        "end": 18,
+        "bottom": 8,
+        "start": 18
+      },
+      "text": {
+        "color": "#ffffff"
+      }
+    },
+    ".overlay-h2": {
+      "text": {
+        "color": "$text",
+        "size": 24,
+        "weight": "600",
+        "letterSpacing": 0.5,
+        "shadow": {
+          "y": 2,
+          "blur": 12,
+          "color": "#000000e6"
+        }
+      }
+    },
+    ".overlay-p": {
+      "text": {
+        "color": "$text",
+        "size": 16
+      }
+    },
+    ".score-row": {
+      "text": {
+        "color": "$text",
+        "size": 16
+      }
+    },
+    ".score-row-winner": {
+      "text": {
+        "color": "#7fd8a0",
+        "size": 16,
+        "weight": "700"
+      }
+    },
+    ".goal-done": {
+      "text": {
+        "color": "#7fd8a0",
+        "size": 16
+      }
+    },
+    ".goal-failed": {
+      "text": {
+        "color": "#e08a8a",
+        "size": 16
+      }
+    },
+    ".goal-line": {
+      "text": {
+        "color": "$text",
+        "size": 16
+      }
+    }
+  },
+  "animations": {},
+  "tokens": {
+    "bg": "#0d1526",
+    "dim": "#9fb0cc",
+    "line": "#2a3c5e",
+    "panel": "#141f38",
+    "text": "#dbe7ff"
+  },
+  "layouts": {},
+  "dropped": [
+    {
+      "selector": ".tagline",
+      "property": "font-style",
+      "value": "italic",
+      "reason": "styles have no italic faces",
+      "line": 24
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+/* Heartfall — the browser build's css/style.css rewritten class-based for the
+   engine's UI (`npm run css` converts it into assets/ui-style.json). Element
+   selectors, ids, the body.gfx-* classes and @media do not convert: every
+   widget names its classes, the graphics categories (bloom glows, card
+   detail) are applied by native/style.ts and native/table.ts, and the
+   breakpoints (phones ≤ 700 px wide, short landscape ≤ 500 px tall) are
+   layouts picked in native/screens.ts. The hand's cards and the table are
+   drawn by native/table.ts. High contrast, larger text and reduced motion
+   are the runtime's. */
+
+:root {
+  --bg: #0d1526;
+  --panel: #141f38;
+  --line: #2a3c5e;
+  --text: #dbe7ff;
+  --dim: #9fb0cc;
+}
+
+* { box-sizing: border-box; }
+
+.body { color: var(--text); font-size: 16px; }
+.lead { color: var(--dim); font-size: 16px; }
+.game-title { color: #ffffff; font-size: 48px; font-weight: 600; letter-spacing: 0.5px; text-shadow: 0 3px 18px rgba(0, 0, 0, 0.85); }
+.tagline { color: var(--dim); font-size: 16px; font-style: italic; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85); }
+.player-chip { color: var(--dim); font-size: 14px; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85); }
+.h2 { color: var(--text); font-size: 24px; font-weight: 600; letter-spacing: 0.5px; }
+.obj-title { color: var(--text); font-size: 24px; font-weight: 600; letter-spacing: 0.5px; }
+.objective { color: #cfe0ff; font-size: 16px; }
+.score { color: var(--text); font-size: 16px; }
+.score-turn { color: #f7c948; font-size: 16px; }
+.round-line { color: #cfe0ff; font-size: 13px; }
+
+.btn { background: #233a6b; color: #eaf1ff; padding: 9px 14px; font-size: 15px; border-radius: 0; text-align: center; }
+.btn:hover { background: #2b4680; }
+.btn:active { background: #1d3159; }
+.btn-big { background: #2f6fd0; color: #ffffff; padding: 13px; font-size: 18px; border-radius: 0; text-align: center; }
+.btn-big:hover { background: #3a7ade; }
+.btn-big:active { background: #2862bb; }
+.btn-act { background: #233a6b; color: #eaf1ff; padding: 9px 20px; font-size: 15px; border-radius: 0; text-align: center; }
+.btn-act:hover { background: #2b4680; }
+.btn-primary { background: #2f6fd0; color: #ffffff; padding: 9px 20px; font-size: 15px; border-radius: 0; text-align: center; }
+.btn-primary:hover { background: #3a7ade; }
+.btn-back { background: #3a4f7d; color: #eaf1ff; padding: 0; font-size: 20px; border-radius: 0; text-align: center; }
+.btn-back:hover { background: #4a6191; }
+.btn-pause { background: #3a4f7d; color: #eaf1ff; padding: 0; font-size: 15px; border-radius: 0; text-align: center; }
+.btn-pause:hover { background: #4a6191; }
+
+.mode-card { background: #2f6fd0; color: #ffffff; padding: 14px; font-size: 18px; border-radius: 0; text-align: left; }
+.mode-card:hover { background: #3a7ade; }
+.mode-name { color: #ffffff; font-size: 18px; }
+.mode-desc { color: #e4eeff; font-size: 16px; }
+
+.list-row { background: transparent; color: var(--text); padding: 9px 4px; font-size: 16px; border-radius: 0; border-top: 1px solid var(--line); text-align: left; }
+.list-row:hover { background: #18264a; }
+.list-name { color: var(--text); font-size: 16px; }
+.list-done { color: #7fd8a0; font-size: 16px; font-weight: 700; }
+
+.toast { background: #3a2f5e; color: #ffffff; padding: 8px 18px; }
+.toast-text { color: #ffffff; font-size: 16px; }
+.account-toast { background: #3a2f5e; color: #ffffff; padding: 8px 18px; border-radius: 10px; }
+
+.overlay-h2 { color: var(--text); font-size: 24px; font-weight: 600; letter-spacing: 0.5px; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9); }
+.overlay-p { color: var(--text); font-size: 16px; }
+.score-row { color: var(--text); font-size: 16px; }
+.score-row-winner { color: #7fd8a0; font-size: 16px; font-weight: 700; }
+.goal-done { color: #7fd8a0; font-size: 16px; }
+.goal-failed { color: #e08a8a; font-size: 16px; }
+.goal-line { color: var(--text); font-size: 16px; }

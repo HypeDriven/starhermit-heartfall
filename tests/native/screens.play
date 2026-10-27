@@ -1,0 +1,71 @@
+# The title, Help, Settings (the runtime's Options), the lists, and Practice's
+# assists and pause menu by pointer and keys.
+until 300 =Play
+frames 150
+expect A moonlit conservatory card table.
+save screens-title
+click =Help
+until 60 Heartfall is a trick-taking card game.
+frames 5
+expect Learn, H asks for a hint and U undoes
+frames 5
+save screens-help
+key Escape 1
+until 60 =Play
+frames 10
+click =Settings
+until 120 Accessibility
+frames 20
+key F1 2
+frames 30
+until 60 =Play
+frames 10
+click =Daily Challenge
+until 60 Seven days, one table each.
+frames 10
+expect Today ·
+save screens-daily
+click =Back
+until 60 =Play
+frames 10
+click =Play
+until 60 Modes
+frames 10
+click =Challenge
+until 60 Six tables, each with its own rules
+frames 10
+expect Moon Marathon
+key Escape 1
+until 60 Modes
+frames 10
+click =Practice
+until 60 Three tables.
+frames 10
+click =Casual
+until 120 Pass 0/3
+frames 10
+click =Hint
+frames 5
+until 30 Pass 3/3
+frames 5
+save screens-hint
+click =Pass 3/3
+frames 5
+until 60 Pass 3 cards to the left.
+frames 5
+key KeyU 1
+frames 5
+until 30 Pass 0/3
+frames 10
+key Escape 1
+until 30 Paused
+frames 10
+save screens-paused
+click =Resume
+frames 10
+key Escape 1
+until 30 Paused
+frames 10
+click =Leave to title
+until 60 =Play
+frames 10

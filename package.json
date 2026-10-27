@@ -1,15 +1,21 @@
 {
   "name": "heartfall",
   "version": "1.0.0",
-  "description": "Heartfall — trick-taking card game at a moonlit conservatory card table.",
+  "private": true,
+  "description": "Heartfall — trick-taking card game at a moonlit conservatory card table, on the StarHermit engine.",
   "type": "module",
   "scripts": {
-    "test": "node tests/rules-sanity.mjs && node tests/lesson-check.mjs && node --test tests/gfx.test.mjs tests/platform.test.mjs tests/i18n.test.mjs",
-    "serve": "node server.js",
-    "test:e2e": "node tests/e2e.mjs"
+    "test": "npm run test:unit && npm run test:native",
+    "test:unit": "node tests/rules-sanity.mjs && node tests/lesson-check.mjs && node --test tests/store.test.mjs tests/i18n.test.mjs",
+    "test:native": "node tests/native.mjs",
+    "test:browser": "node tools/browser-play.mjs .",
+    "package": "node tools/package-web.mjs",
+    "css": "node tools/css.mjs",
+    "bake": "node tools/bake-art.mjs",
+    "plays": "node tools/gen-play.mjs",
+    "start": "node server.js"
   },
   "license": "SEE LICENSE IN LICENSE.md",
-  "private": true,
   "devDependencies": {
     "playwright-core": "^1.62.1"
   }

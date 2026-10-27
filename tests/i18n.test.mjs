@@ -1,17 +1,20 @@
-// Localization coverage: every English key the markup, code and content use is
-// translated in every locale (en-GB → en-US, es-ES → es-419, fr-CA → fr-FR
-// inherit), placeholders survive, the language follows sh-language.js and
-// switches live. Run: node --test tests/i18n.test.mjs
+// Localization coverage: every English key the engine client (native/*.ts),
+// the content and the rules' hint lines show is translated in every locale
+// (en-GB → en-US, es-ES → es-419, fr-CA → fr-FR inherit), placeholders
+// survive, no table keeps a key nothing shows, the account lines exist in
+// every locale, and js/i18n.js switches locale as native/i18n.ts drives it.
+// Run: node --test tests/i18n.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { loadTables, codeKeys, htmlKeys, audit, bootI18n } from './i18n-common.mjs';
+import { readFileSync, readdirSync } from 'node:fs';
+import vm from 'node:vm';
+import { loadTables, codeKeys, audit, bootI18n, LOCALES } from './i18n-common.mjs';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8');
 // The game scripts are UMD; under "type": "module" evaluate them against a shared root.
 const gameRoot = {};
-for (const f of ['js/rng.js', 'js/content.js', 'js/gfx.js']) new Function('self', 'globalThis', read(f)).call(gameRoot, gameRoot, gameRoot);
+for (const f of ['js/rng.js', 'js/content.js', 'js/platform-strings.js']) new Function('self', 'globalThis', read(f)).call(gameRoot, gameRoot, gameRoot);
 const Content = gameRoot.HFContent;
 
 /** Content shown in play (names, goals, achievements) and the rules' hint lines. */
@@ -27,31 +30,41 @@ function contentKeys() {
   return keys;
 }
 
-function usedKeys() {
+export function usedKeys() {
   const keys = new Set(contentKeys());
-  htmlKeys(read('index.html')).forEach((k) => keys.add(k));
-  codeKeys(read('js/game.js')).forEach((k) => keys.add(k));
+  for (const f of readdirSync(new URL('native/', ROOT)).filter((n) => n.endsWith('.ts'))) {
+    codeKeys(read('native/' + f), ['tr', 'N'], []).forEach((k) => keys.add(k));
+  }
   return [...keys].filter((k) => /[A-Za-z]/.test(k) && k !== 'HEARTFALL' && k !== 'Heartfall').sort();
 }
 
-test('every used key is translated in every locale; placeholders intact', () => {
+test('every used key is translated in every locale; placeholders intact; nothing stale', () => {
   assert.deepEqual(audit(loadTables(ROOT, 'js/strings.js', 'HF_STRINGS'), usedKeys()), []);
 });
 
-test('the locale follows sh-language and switches live', () => {
-  const { I18N, events, doc } = bootI18n(ROOT, { strings: 'js/strings.js', i18n: 'js/i18n.js', global: 'HFI18N', languages: ['de-DE'] });
-  assert.equal(I18N.lang, 'de-DE');
-  assert.equal(doc.documentElement.lang, 'de-DE');
-  assert.equal(I18N.T('Play again'), 'Nochmal spielen');
-  I18N.language.setChoice('fr-CA');
-  assert.equal(I18N.lang, 'fr-CA');
-  assert.equal(events.at(-1), 'fr-CA');
-  assert.equal(I18N.T('Your turn — play a card.'), 'À vous — jouez une carte.');
-  I18N.language.setChoice('it-IT');
-  assert.equal(I18N.T('Round {n}', { n: 3 }), 'Mano 3');
+test('the account and leaderboard lines exist in every locale with their placeholders', () => {
+  const P = gameRoot.HFPlatformStrings;
+  const en = P.platformStrings('en-US');
+  for (const loc of LOCALES) {
+    const t = P.platformStrings(loc);
+    assert.deepEqual(Object.keys(t).sort(), Object.keys(en).sort(), loc);
+    for (const k of Object.keys(en)) {
+      assert.deepEqual((t[k].match(/\{\w+\}/g) || []).sort(), (en[k].match(/\{\w+\}/g) || []).sort(), `${loc} ${k}`);
+    }
+  }
+  assert.equal(P.fmtPlatform(P.platformStrings('de-DE')['lb.rank'], { rank: 4 }), 'Platz in der Bestenliste: #4');
 });
 
-test('the Graphics panel strings cover the nine locales', () => {
-  const Gfx = gameRoot.HFGfx;
-  for (const l of ['en-US', 'en-GB', 'es-419', 'es-ES', 'de-DE', 'fr-FR', 'fr-CA', 'pt-BR', 'it-IT']) assert.ok(Gfx.LOCALES.includes(l), l);
+test('the locale switches as the engine client sets it', () => {
+  const { I18N } = bootI18n(ROOT, { strings: 'js/strings.js', i18n: 'js/i18n.js', global: 'HFI18N' });
+  assert.equal(I18N.lang, 'en-US');
+  assert.equal(I18N.setLocale('de-DE'), 'de-DE');
+  assert.equal(I18N.T('Play again'), 'Nochmal spielen');
+  I18N.setLocale('fr-CA');
+  assert.equal(I18N.T('Your turn — play a card.'), 'À vous — jouez une carte.');
+  I18N.setLocale('it-IT');
+  assert.equal(I18N.T('Round {n}', { n: 3 }), 'Mano 3');
+  assert.equal(I18N.setLocale('xx-YY'), 'en-US');
+  assert.equal(I18N.T('Round {n}', { n: 2 }), 'Round 2');
 });
+void vm;

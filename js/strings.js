@@ -8,23 +8,19 @@
 (function (root) {
   'use strict';
   var ROWS = [
+    ['Back', 'Atrás', 'Zurück', 'Retour', 'Voltar', 'Indietro'],
+    ['Selected', 'Seleccionada', 'Ausgewählt', 'Sélectionnée', 'Selecionada', 'Selezionata'],
+    ['Not playable', 'No se puede jugar', 'Nicht spielbar', 'Injouable', 'Não pode ser jogada', 'Non giocabile'],
     // ---- static markup (index.html)
-    ['Heartfall home', 'Inicio de Heartfall', 'Heartfall – Start', 'Accueil de Heartfall', 'Início de Heartfall', 'Home di Heartfall'],
-    ['Main menu', 'Menú principal', 'Hauptmenü', 'Menu principal', 'Menu principal', 'Menu principale'],
-    ['Mode select', 'Selección de modo', 'Modusauswahl', 'Choix du mode', 'Seleção de modo', 'Scelta modalità'],
     ['Learn', 'Aprender', 'Lernen', 'Apprendre', 'Aprender', 'Impara'],
     ['Journey', 'Viaje', 'Reise', 'Voyage', 'Jornada', 'Viaggio'],
-    ['Daily', 'Diario', 'Täglich', 'Quotidien', 'Diário', 'Giornaliera'],
     ['Practice', 'Práctica', 'Training', 'Entraînement', 'Treino', 'Allenamento'],
     ['Challenge', 'Desafío', 'Herausforderung', 'Défi', 'Desafio', 'Sfida'],
     ['Settings', 'Ajustes', 'Einstellungen', 'Paramètres', 'Ajustes', 'Impostazioni'],
     ['Help', 'Ayuda', 'Hilfe', 'Aide', 'Ajuda', 'Aiuto'],
     ['Play', 'Jugar', 'Spielen', 'Jouer', 'Jogar', 'Gioca'],
     ['Pause game', 'Pausar la partida', 'Spiel pausieren', 'Mettre en pause', 'Pausar o jogo', 'Metti in pausa'],
-    ['Your cards', 'Tus cartas', 'Deine Karten', 'Vos cartes', 'Suas cartas', 'Le tue carte'],
     ['A moonlit conservatory card table.', 'Una mesa de cartas en un invernadero a la luz de la luna.', 'Ein Kartentisch im mondbeschienenen Wintergarten.', 'Une table de cartes dans une serre au clair de lune.', 'Uma mesa de cartas numa estufa ao luar.', 'Un tavolo da gioco in una serra al chiaro di luna.'],
-    ['Sign in with StarHermit', 'Iniciar sesión con StarHermit', 'Mit StarHermit anmelden', 'Se connecter avec StarHermit', 'Entrar com StarHermit', 'Accedi con StarHermit'],
-    ['Invite a friend', 'Invitar a un amigo', 'Freund einladen', 'Inviter un ami', 'Convidar um amigo', 'Invita un amico'],
     ['Daily Challenge', 'Desafío diario', 'Tägliche Herausforderung', 'Défi du jour', 'Desafio diário', 'Sfida giornaliera'],
     ['Modes', 'Modos', 'Modi', 'Modes', 'Modos', 'Modalità'],
     ['Tutorial — the rules, one at a time.', 'Tutorial: las reglas, de una en una.', 'Tutorial – die Regeln, eine nach der anderen.', 'Tutoriel — les règles, une à la fois.', 'Tutorial — as regras, uma de cada vez.', 'Tutorial: le regole, una alla volta.'],
@@ -37,12 +33,6 @@
     ['Seven days, one table each. The rules change with the moon.', 'Siete días, una mesa cada uno. Las reglas cambian con la luna.', 'Sieben Tage, je ein Tisch. Die Regeln wechseln mit dem Mond.', 'Sept jours, une table chacun. Les règles changent avec la lune.', 'Sete dias, uma mesa cada. As regras mudam com a lua.', 'Sette giorni, un tavolo ciascuno. Le regole cambiano con la luna.'],
     ['Three tables. Undo and hints are on.', 'Tres mesas. Deshacer y pistas activados.', 'Drei Tische. Rückgängig und Tipps sind an.', 'Trois tables. Annuler et indices activés.', 'Três mesas. Desfazer e dicas ativados.', 'Tre tavoli. Annulla e suggerimenti attivi.'],
     ['Six tables, each with its own rules and its own price.', 'Seis mesas, cada una con sus reglas y su precio.', 'Sechs Tische, jeder mit eigenen Regeln und eigenem Preis.', 'Six tables, chacune avec ses règles et son prix.', 'Seis mesas, cada uma com suas regras e seu preço.', 'Sei tavoli, ognuno con le sue regole e il suo prezzo.'],
-    ['Audio', 'Audio', 'Audio', 'Audio', 'Áudio', 'Audio'],
-    ['Music', 'Música', 'Musik', 'Musique', 'Música', 'Musica'],
-    ['Effects', 'Efectos', 'Effekte', 'Effets', 'Efeitos', 'Effetti'],
-    ['Motion & text', 'Movimiento y texto', 'Bewegung & Text', 'Mouvement et texte', 'Movimento e texto', 'Movimento e testo'],
-    ['Reduced motion', 'Movimiento reducido', 'Weniger Bewegung', 'Animations réduites', 'Movimento reduzido', 'Movimento ridotto'],
-    ['Larger text', 'Texto más grande', 'Größere Schrift', 'Texte plus grand', 'Texto maior', 'Testo più grande'],
     ['Paused', 'En pausa', 'Pausiert', 'En pause', 'Pausado', 'In pausa'],
     ['Resume', 'Continuar', 'Fortsetzen', 'Reprendre', 'Continuar', 'Riprendi'],
     ['Leave to title', 'Salir al título', 'Zum Titelbildschirm', 'Retour à l’écran titre', 'Sair para o título', 'Torna al titolo'],
@@ -52,7 +42,6 @@
     ['Heartfall is a trick-taking card game. Pass cards, follow suit, avoid penalty hearts and the Nightshade Queen (Q♠) — or capture every penalty for an Eclipse.', 'Heartfall es un juego de cartas de bazas. Pasa cartas, sigue el palo, evita los corazones de penalización y la Reina Belladona (Q♠), o captura todas las penalizaciones para un Eclipse.', 'Heartfall ist ein Stichspiel. Gib Karten weiter, bediene die Farbe, meide Strafherzen und die Nachtschattenkönigin (Q♠) – oder hol dir alle Strafkarten für eine Finsternis.', 'Heartfall est un jeu de cartes à plis. Passez des cartes, fournissez à la couleur, évitez les cœurs de pénalité et la Reine Belladone (Q♠) — ou capturez toutes les pénalités pour une Éclipse.', 'Heartfall é um jogo de cartas de vazas. Passe cartas, siga o naipe, evite as copas de penalidade e a Rainha Beladona (Q♠) — ou capture todas as penalidades para um Eclipse.', 'Heartfall è un gioco di carte a prese. Passa le carte, rispondi al seme, evita i cuori di penalità e la Regina Belladonna (Q♠), oppure cattura tutte le penalità per un’Eclissi.'],
     ['Lowest match score wins once anyone reaches the threshold; full-penalty capture applies the declared room rule.', 'Gana la puntuación más baja cuando alguien alcanza el límite; capturar todas las penalizaciones aplica la regla de la sala.', 'Sobald jemand die Grenze erreicht, gewinnt die niedrigste Punktzahl; wer alle Strafkarten holt, löst die angesagte Tischregel aus.', 'Le score le plus bas l’emporte dès qu’un joueur atteint le seuil ; capturer toutes les pénalités applique la règle de la table.', 'Vence a menor pontuação quando alguém atinge o limite; capturar todas as penalidades aplica a regra da mesa.', 'Vince il punteggio più basso quando qualcuno raggiunge la soglia; catturare tutte le penalità applica la regola del tavolo.'],
     ['Results show a component breakdown rather than one unexplained total. Ties use, in order: primary objective completion, fewer invalid actions, lower authoritative elapsed time, then stable session identifier.', 'Los resultados muestran el desglose en lugar de un total sin explicar. Los empates se resuelven por: objetivo principal cumplido, menos acciones no válidas, menor tiempo oficial y, por último, el identificador de sesión.', 'Ergebnisse zeigen eine Aufschlüsselung statt einer unerklärten Summe. Gleichstände entscheiden der Reihe nach: Hauptziel erfüllt, weniger ungültige Aktionen, kürzere offizielle Zeit, dann die Sitzungskennung.', 'Les résultats détaillent chaque composante plutôt qu’un total inexpliqué. Les égalités se départagent ainsi : objectif principal atteint, moins d’actions invalides, temps officiel plus court, puis identifiant de session.', 'Os resultados mostram cada componente em vez de um total sem explicação. Empates usam, em ordem: objetivo principal cumprido, menos ações inválidas, menor tempo oficial e, por fim, o identificador da sessão.', 'I risultati mostrano ogni componente invece di un totale non spiegato. I pareggi si risolvono così: obiettivo principale raggiunto, meno azioni non valide, tempo ufficiale minore, infine l’identificativo di sessione.'],
-    ['Escape', 'Esc', 'Esc', 'Échap', 'Esc', 'Esc'],
     ['Controls: click or tap a card to select or play it. In Practice and Learn, {hint} asks for a hint and {undo} undoes your last action. {pause} or the pause button opens the pause menu.', 'Controles: haz clic o toca una carta para seleccionarla o jugarla. En Práctica y Aprender, {hint} pide una pista y {undo} deshace tu última acción. {pause} o el botón de pausa abre el menú de pausa.', 'Steuerung: Klicke oder tippe auf eine Karte, um sie zu wählen oder zu spielen. In Training und Lernen gibt {hint} einen Tipp und {undo} macht deine letzte Aktion rückgängig. {pause} oder die Pausetaste öffnet das Pausenmenü.', 'Commandes : cliquez ou touchez une carte pour la sélectionner ou la jouer. En Entraînement et Apprendre, {hint} donne un indice et {undo} annule votre dernière action. {pause} ou le bouton pause ouvre le menu.', 'Controles: clique ou toque numa carta para selecioná-la ou jogá-la. Em Treino e Aprender, {hint} pede uma dica e {undo} desfaz sua última ação. {pause} ou o botão de pausa abre o menu de pausa.', 'Comandi: fai clic o tocca una carta per selezionarla o giocarla. In Allenamento e Impara, {hint} chiede un suggerimento e {undo} annulla l’ultima azione. {pause} o il pulsante di pausa apre il menu.'],
     ['Daily {date}', 'Diario {date}', 'Tagesrunde {date}', 'Défi du {date}', 'Desafio {date}', 'Sfida del {date}'],
     // ---- refused actions
@@ -100,7 +89,6 @@
     ['Play again', 'Jugar de nuevo', 'Nochmal spielen', 'Rejouer', 'Jogar de novo', 'Gioca ancora'],
     ['{goal} — achieved', '{goal}: conseguido', '{goal} – geschafft', '{goal} — réussi', '{goal} — cumprido', '{goal}: riuscito'],
     ['{goal} — not met', '{goal}: no conseguido', '{goal} – verfehlt', '{goal} — manqué', '{goal} — não cumprido', '{goal}: mancato'],
-    ['Syncing…', 'Sincronizando…', 'Wird synchronisiert …', 'Synchronisation…', 'Sincronizando…', 'Sincronizzazione…'],
     ['Saving…', 'Guardando…', 'Wird gespeichert …', 'Enregistrement…', 'Salvando…', 'Salvataggio…'],
     ['Cloud synced', 'Sincronizado en la nube', 'Cloud synchronisiert', 'Synchronisé en ligne', 'Sincronizado na nuvem', 'Sincronizzato nel cloud'],
     ['Cloud unreachable', 'Nube inaccesible', 'Cloud nicht erreichbar', 'Sauvegarde en ligne injoignable', 'Nuvem inacessível', 'Cloud non raggiungibile'],
@@ -211,4 +199,4 @@
   T['es-ES'] = ES_ES;
   T['fr-CA'] = FR_CA;
   root.HF_STRINGS = T;
-})(typeof self !== 'undefined' ? self : this);
+})(typeof self !== 'undefined' ? self : (typeof globalThis !== 'undefined' ? globalThis : this));
