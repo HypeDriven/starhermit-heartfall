@@ -17,7 +17,7 @@ burns out — unless you can take *every* penalty and turn the night inside out.
 | Genre | Trick-taking card game (Hearts family), single-player vs. AI |
 | Players | 1 human (seat 0) + 1–3 AI seats; tables of 2, 3 or 4 |
 | Session length | 90 s (a Learn lesson) to ~12 min (a 100-point Journey match); one round is ~60–90 s |
-| Platforms | A StarHermit engine script game (engine 1.22.0, host API 1.21): played natively by the StarHermit client and in browsers by the engine's web runtime, desktop and mobile, portrait and landscape; offline-capable |
+| Platforms | A StarHermit engine script game (engine 1.23.0, host API 1.21): played natively by the StarHermit client and in browsers by the engine's web runtime, desktop and mobile, portrait and landscape; offline-capable |
 | Rendering | `starhermit:draw` for the painted table, its light, fireflies, seat labels and trick cards (faces painted once into `starhermit:canvas` canvases); `starhermit:ui` (immediate mode) for every screen, the HUD, the hand and the overlays. Looks per graphics level (§8) |
 | Audio | `starhermit:audio`: 20 authored Opus one-shots on the effects/interface buses + the ambient pad, rendered once into a seamless loop, on the music bus |
 | Persistence | The runtime's save (`starhermit:storage` `saves`): progress on the device and, signed in, in the player's cloud slot |
@@ -26,7 +26,7 @@ burns out — unless you can take *every* penalty and turn the night inside out.
 
 | Path | Contents |
 |---|---|
-| `starhermit.txt` | Manifest: name, description, owner, `server=score-script.js`, version, contentVersion, cover, `launch=index.html`, `engine.*` (api 1, entry `native/main.ts`, version 1.22.0, minor 19, capabilities platform/storage/clipboard), `control.*` keys and `engine.gamepad.*` pads |
+| `starhermit.txt` | Manifest: name, description, owner, `server=score-script.js`, version, contentVersion, cover, `launch=index.html`, `engine.*` (api 1, entry `native/main.ts`, version 1.23.0, minor 19, capabilities platform/storage/clipboard), `control.*` keys and `engine.gamepad.*` pads |
 | `index.html`, `starhermit-files.json` | The engine's web loader and file index, written by `npm run package` (`starhermit package --web .`); never edited by hand |
 | `native/main.ts` | Entry: navigation, the match session (passes, plays, AI seats on fixed steps, hint/undo, lesson goals), results, achievements, leaderboard posting, input actions, lifecycle |
 | `native/screens.ts` | Every screen and overlay as `starhermit:ui`: title, modes, the five lists, Help, the play HUD and hand, pause / lesson / results overlays, toasts |
