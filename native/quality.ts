@@ -1,15 +1,18 @@
 // The look per graphics level: the browser build's four presets (js/gfx.js
 // TABLE: card and label shadows, the lamp pool and moonlight, bloom, the
 // colour grade and vignette, fireflies, ambient motion and card detail)
-// keyed by the runtime's quality tier (frame().quality), with the firefly
-// count scaled within the tier by the level (frame().levelIndex) as the
-// browser build scaled its budgets by the hardware level (js/gfx.js
-// BUDGETS, FIREFLY_MAX). The runtime owns the rest of the old Graphics
+// keyed by the runtime's quality tier (frame().quality). This is a 2D game
+// drawn with starhermit:draw: its shadows, lamp, glow and grade are its own
+// art, not the engine renderer's, so they stay keyed by the tier. The
+// firefly count scales with the level's particle budget
+// (levelSettings().particles) against the tier's anchor level (quantum,
+// molecular, terrestrial, galactic), at most four times the tier's own and
+// within the browser build's FIREFLY_MAX. The runtime owns the rest of the old Graphics
 // panel: Auto and the level choice, render scale and the pixel-ratio cap,
 // adaptive resolution, the frame-rate limit and readout. The per-category
 // overrides of the old panel are not offered (the runtime's Options choose
 // a level).
-import type { QualityTier } from "starhermit:engine";
+import { levelSettings, type GraphicsLevel, type LevelSettings, type QualityTier } from "starhermit:engine";
 
 export type Preset = QualityTier;
 export interface Look {
@@ -49,16 +52,17 @@ const BUDGETS: Record<Preset, { fireflies: number; labelGlow: boolean; cardShado
 const SHADOW_BLUR = { off: 0, low: 4, medium: 9, high: 16 };
 const PARTICLE_SHARE = { off: 0, low: 0.375, high: 1 };
 const FIREFLY_MAX = 160;
-/** The first level index of each tier. */
-const TIER_FLOOR: Record<Preset, number> = { low: 0, balanced: 2, high: 4, ultra: 7 };
+/** Each tier's anchor level: its budgets are tuned for it. */
+const ANCHOR: Record<Preset, GraphicsLevel> = { low: "quantum", balanced: "molecular", high: "terrestrial", ultra: "galactic" };
 
-/** The look for a quality tier at a level index (0 … 9). */
-export function lookFor(preset: Preset, levelIndex: number): Look {
+/** The look for a graphics level (default: this frame's). */
+export function lookFor(s: LevelSettings = levelSettings()): Look {
+  const preset = s.quality;
   const row = TABLE[preset] ?? TABLE.balanced;
   const b = BUDGETS[preset] ?? BUDGETS.balanced;
-  // Levels are about 1.64× apart in GPU throughput: the firefly budget grows
-  // with the level above the tier's first, at most four times the tier's own.
-  const k = Math.min(4, Math.pow(1.64, Math.max(0, levelIndex - (TIER_FLOOR[preset] ?? 0))));
+  // The level's particle budget doubles a level: the firefly budget grows
+  // with it above the tier's anchor, at most four times the tier's own.
+  const k = Math.min(4, Math.max(1, s.particles / levelSettings(ANCHOR[preset] ?? "molecular").particles));
   const budget = Math.min(FIREFLY_MAX, Math.round(b.fireflies * k));
   return {
     preset, ...row,

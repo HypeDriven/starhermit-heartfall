@@ -1,0 +1,60 @@
+# Graphics-tier bench (tools/engine-tier-bench.mjs): Journey stage 1 (First Hand, fixed deal) measured
+# from the pass through five tricks: the lamp pool, moonlight, fireflies, card faces and shadows, the
+# seats' glow, played by the hint's moves (as journey.play).
+until 300 =Play
+frames 10
+click =Play
+until 60 Modes
+frames 10
+click =Journey
+until 60 Forty stages
+frames 10
+click 1. First Hand
+until 120 You (13)
+frames 120
+measure start
+until 1200 Pass 0/3
+frames 5
+click =A♠
+frames 5
+until 30 Pass 1/3
+click =K♠
+frames 5
+until 30 Pass 2/3
+click =K♥
+frames 5
+until 30 Pass 3/3
+frames 5
+click =Pass 3/3
+frames 5
+frames 2
+until 1200 Your turn
+frames 5
+click =4♣
+frames 5
+until 1200 Your turn
+frames 5
+click =J♠
+frames 5
+until 1200 Your turn
+frames 5
+click =10♣
+frames 5
+frames 60
+until 1200 Your turn
+frames 5
+click =6♠
+frames 5
+until 1200 Your turn
+frames 5
+click =3♦
+frames 5
+until 1200 Your turn
+frames 5
+click =2♠
+frames 5
+until 1200 Your turn
+frames 5
+click =Q♥
+frames 60
+measure stop

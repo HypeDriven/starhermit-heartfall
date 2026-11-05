@@ -12,27 +12,17 @@
 // interface bus. The old music bus ran at half the slider (0.5 × 80 %): the
 // pad's gain folds that in. The synthesized stand-ins it played while a
 // sample loaded are not ported (the engine's web runtime drops clip loads
-// while a synthesis graph changes). Clips load once the mixer runs
-// (natively at once, in a browser after the first press), one at a time.
+// while a synthesis graph changes). The clips all load at once in onStart
+// (every loaded clip reaches the mixer, natively and on the web); the pad
+// renders and starts once the mixer runs.
 import { files } from "starhermit:engine";
 import { context, createClip, loadClip, play as playClip, type AudioClip, type Bus } from "starhermit:audio";
 
-const FIRST = ["ui-click", "card-select", "card-play", "cards-deal", "card-pass", "turn-prompt", "trick-take", "invalid"];
 const INTERFACE = new Set(["ui-click", "ui-back", "pause"]);
 
 const eventFile = new Map<string, string>();
 const clips = new Map<string, AudioClip>();
-const queue: string[] = [];
-let loading = false;
-let wantClips = false;
-function load(name: string): void { if (!queue.includes(name) && !clips.has(name)) queue.push(name); }
-function pump(): void {
-  if (loading || !queue.length) return;
-  const name = queue.shift()!;
-  loading = true;
-  loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); loading = false; }, (e: unknown) => { console.warn(`sfx ${name}: ${String(e)}`); loading = false; });
-}
-/** Reads the manifest and asks for the clips; they load once the mixer runs (see update). */
+/** Reads the manifest and loads every clip at once (onStart); a cue whose clip is still loading is skipped. */
 export function loadSfx(): void {
   try {
     const list = files.readJson("sfx/manifest.json") as unknown as { name?: string; event?: string }[];
@@ -40,7 +30,9 @@ export function loadSfx(): void {
       if (e && typeof e.name === "string" && typeof e.event === "string" && !eventFile.has(e.event)) eventFile.set(e.event, e.name);
     }
   } catch (e) { console.warn(`sfx manifest: ${String(e)}`); }
-  wantClips = true;
+  for (const name of new Set(eventFile.values())) {
+    loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); }, (e: unknown) => console.warn(`sfx ${name}: ${String(e)}`));
+  }
 }
 
 /** Plays a named event's sample (js/game.js playSfx); a still-loading sample is silent. */
@@ -50,7 +42,7 @@ export function play(event: string): void {
   if (!clip) return;
   const bus: Bus = INTERFACE.has(event) ? "interface" : "effects";
   try { playClip(clip, { bus }); }
-  catch { clips.delete(file!); load(file!); } // a clip the mixer lost: load it again
+  catch { /* the mixer is full this frame: skip it */ }
 }
 
 /** Rules events as sounds, the same for the player's and the AI seats' plays (js/game.js playEventSfx). */
@@ -98,16 +90,9 @@ let unlocked = false;
 /** The first press (the browser build's audio unlock): the pad may start. */
 export function unlock(): void { unlocked = true; }
 
-/** Each frame: the samples once the mixer runs (one at a time), then the pad. */
+/** Each frame once the mixer runs: the pad, rendered a slice a frame, then started. */
 export function update(): void {
-  if (context.state !== "running") return;
-  if (wantClips) {
-    wantClips = false;
-    for (const e of FIRST) { const f = eventFile.get(e); if (f) load(f); }
-    for (const name of eventFile.values()) load(name);
-  }
-  pump();
-  if (loading || queue.length) return;
+  if (context.state !== "running") return; // rendering and starting the pad still waits for the mixer
   if (!pad) {
     if (!renderPad(8000)) return;
     try { pad = createClip([padBuf], RATE); } catch (e) { console.warn(`audio: ${String(e)}`); padPos = 0; }

@@ -368,7 +368,8 @@ Bloom adds a warm halo to the wordmark and the active score.
 The old Graphics panel is the runtime's Options now: Auto and the graphics level, render scale and
 pixel-ratio cap, adaptive resolution, the frame-rate limit and readout. `native/quality.ts` keys the
 browser build's four presets by the runtime's quality tier (`frame().quality`), scaling the firefly
-budget within the tier by the level (`frame().levelIndex`, ≤ 4×, at most 160); the per-effect
+budget by the level's particle budget over the tier's anchor level (`levelSettings().particles`, ≤ 4×,
+at most 160); the shadows, lamp, bloom and grade are the game's own 2D art and stay keyed by the tier; the per-effect
 overrides of the old panel are not offered.
 
 | Tier | Shadows | Lighting | Bloom | Grade | Fireflies | Ambient motion | Cards | Card shadow cap | Seat glow |

@@ -15,7 +15,7 @@
 // not paused, so a hidden window or the pause menu never moves the table
 // and play scripts replay exactly.
 import "./classic.ts";
-import { clipboard, frame, onFixedUpdate, onQuit, onRender, onResume, onStart, onSuspend, onUpdate, setFixedRate } from "starhermit:engine";
+import { clipboard, frame, levelSettings, onFixedUpdate, onQuit, onRender, onResume, onStart, onSuspend, onUpdate, setFixedRate } from "starhermit:engine";
 import { onAction } from "starhermit:input";
 import * as ui from "starhermit:ui";
 import { requestSignIn } from "starhermit:platform";
@@ -38,7 +38,7 @@ export const app = {
   focusNext: null as string | null,
   paused: false,
   pausedFrame: 0,
-  look: lookFor("balanced", 2) as Look,
+  look: lookFor(levelSettings("molecular")) as Look,
 };
 const navStack: ScreenName[] = [];
 
@@ -444,10 +444,10 @@ onAction((e) => {
 let lookKey = "";
 function applyLook(): void {
   const f = frame();
-  const key = `${f.quality}:${f.levelIndex}`;
+  const key = f.level;
   if (key === lookKey) return;
   lookKey = key;
-  app.look = lookFor(f.quality, f.levelIndex);
+  app.look = lookFor(levelSettings(f.level));
   styleLook(app.look);
   table.setLook(app.look);
 }
