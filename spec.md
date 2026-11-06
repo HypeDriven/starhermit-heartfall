@@ -38,7 +38,7 @@ burns out — unless you can take *every* penalty and turn the night inside out.
 | `native/i18n.ts`, `native/classic.ts` | Locale from the runtime's interface language; the classic scripts loaded with `loadClassic` and typed |
 | `js/rng.js`, `js/rules.js`, `js/content.js` | `HFRNG`, `HFRules` (the whole rules contract, AI, hints), `HFContent` (stages, challenges, practice, dailies, lessons, achievements) — unchanged from the browser build |
 | `js/store.js` | `HFStore`: the pure save model (fresh progress, engine save, browser-save migration, conflict merge) |
-| `js/strings.js`, `js/i18n.js`, `js/platform-strings.js` | Translation tables (English keys) and `HFI18N` (`T`, `setLocale`); the account and leaderboard lines (`sh.*`, `lb.*`) in nine locales |
+| `assets/strings.json` | Translation tables (English keys) in nine locales, read by the engine's `strings`; the account and leaderboard lines are the engine's `starhermit.*` keys |
 | `score-script.js` | The platform script (`server=`): range-checks a finished match's winning margin and posts it to the `margin` board |
 | `server.js` | Local dev static file server (left out of the package) |
 | `sfx/` | 20 Opus clips + `manifest.json` (event → file, read at start) + `manifest.txt`/`manifest.md` (left out of the package) |
@@ -401,13 +401,12 @@ gain (0.5) keeps that balance.
 
 **Music / ambience.** No music files. The browser build's generative pad — sine 110 Hz, sine
 164.81 Hz and triangle 220 Hz through a lowpass at 520 Hz whose cutoff a 0.07 Hz LFO sweeps
-±140 Hz — is rendered once (a slice a frame) into a seamless 1/0.07 s loop, each voice rounded to
+±140 Hz — is rendered once offline (`OfflineAudioContext`) into a seamless 1/0.07 s loop, each voice rounded to
 whole cycles in the loop, and played looping from the first press.
 
-**Sample loading.** `sfx/manifest.json` maps events to files; the clips load one at a time once
-the mixer runs (natively at once, in a browser after the first press), the first cues of a match
-first. A cue whose clip is still loading is silent; the synthesized stand-ins the browser build
-played meanwhile are not ported (the web runtime drops clip loads while a synthesis graph changes).
+**Sample loading.** `sfx/manifest.json` maps events to files; the clips all load at once at
+start. A cue whose clip is still loading is silent; the synthesized stand-ins the browser build
+played meanwhile are not ported.
 
 **SFX event table** — this is the source for `sfx/manifest.txt`.
 
@@ -443,13 +442,13 @@ seat caused them.
 ## 10. Localization
 
 Nine locales ship: **en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT**. Every
-player-visible string is an English key in `js/strings.js` with es-419, de-DE, fr-FR, pt-BR and
+player-visible string is an English key in `assets/strings.json` with es-419, de-DE, fr-FR, pt-BR and
 it-IT translations; en-GB, es-ES and fr-CA carry only their differences and otherwise inherit
 en-US, es-419 and fr-FR. That covers the menus, mode cards, headings, Help, the lists, the
 objective, scores, action buttons, toasts, the table's "Round n" line, the overlays, the account
 line, the rules engine's hint lines and rejection reasons, and the content names in
 `js/content.js` (stage, challenge, practice and lesson names, `GOAL_TEXT`, achievement names, the
-"You" seat). The account and leaderboard lines live in `js/platform-strings.js`. "Heartfall",
+"You" seat). The account and leaderboard lines are the engine's `starhermit.*` strings. "Heartfall",
 "StarHermit" and the persona names (Fern, Moth, Luna, Pip) are not translated; card faces are rank
 glyphs plus suit symbols in every locale.
 
@@ -510,8 +509,7 @@ Guests see **Sign in with StarHermit** (`requestSignIn`).
 
 **Leaderboard.** Every finished Journey, Daily or Challenge match posts its winning margin (the
 lowest opponent total minus the player's, −500…500, negative when behind) through
-`score-script.js` (a practice session whose game socket carries `{ type: 'result', scores: { margin } }`,
-as the JS SDK's `submitScores` did); the results overlay shows "Leaderboard rank: #N" (or
+`leaderboards.submitScore` (`score-script.js` range-checks it); the results overlay shows "Leaderboard rank: #N" (or
 posted / not posted). Practice and Learn post nothing. The score is the client's total,
 range-checked by the script (the user's decision for solo boards); there is no multiplayer, so no
 refereed results are needed.

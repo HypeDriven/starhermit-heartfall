@@ -3,20 +3,19 @@
 // the quiet generative pad (110 Hz and 164.81 Hz sines with a 220 Hz
 // triangle through a lowpass at 520 Hz that a 0.07 Hz LFO opens and
 // closes by 140 Hz), which the browser build ran as live oscillators; here
-// it is rendered once into a seamless 1/0.07 s loop (createClip) and played
-// looping on the music bus. As in the browser build it starts with the
+// it is rendered once offline (OfflineAudioContext) into a seamless 1/0.07 s
+// loop and played looping on the music bus. As in the browser build it starts with the
 // first press (the audio unlock).
 //
 // The browser build's Music and Effects sliders are the runtime's Options
 // (music and effects buses, mute, voice limit); the menu clicks play on the
 // interface bus. The old music bus ran at half the slider (0.5 × 80 %): the
 // pad's gain folds that in. The synthesized stand-ins it played while a
-// sample loaded are not ported (the engine's web runtime drops clip loads
-// while a synthesis graph changes). The clips all load at once in onStart
-// (every loaded clip reaches the mixer, natively and on the web); the pad
-// renders and starts once the mixer runs.
+// sample loaded are not ported. The clips all load at once in onStart
+// (every loaded clip reaches the mixer, natively and on the web), the pad
+// renders there too and starts once the mixer runs.
 import { files } from "starhermit:engine";
-import { context, createClip, loadClip, play as playClip, type AudioClip, type Bus } from "starhermit:audio";
+import { context, createClip, loadClip, OfflineAudioContext, play as playClip, type AudioClip, type Bus } from "starhermit:audio";
 
 const INTERFACE = new Set(["ui-click", "ui-back", "pause"]);
 
@@ -33,6 +32,7 @@ export function loadSfx(): void {
   for (const name of new Set(eventFile.values())) {
     loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); }, (e: unknown) => console.warn(`sfx ${name}: ${String(e)}`));
   }
+  renderPad().then((c) => { pad = c; }, (e: unknown) => console.warn(`audio: ${String(e)}`));
 }
 
 /** Plays a named event's sample (js/game.js playSfx); a still-loading sample is silent. */
@@ -60,29 +60,33 @@ export function playEvents(events: readonly { type: string; p?: number; winner?:
 // -- the pad ----------------------------------------------------------------------------------
 const RATE = 11025;
 const LOOP_S = 1 / 0.07;
-/** The pad's loop, rendered a slice a frame (the native interpreter is slow): each voice rounded
- * to whole cycles in the loop so it joins seamlessly; two passes of a one-pole lowpass, the second
- * starting from the first's end state (no click at the seam). */
-const VOICES: [number, boolean, number][] = [[110, true, 0.2], [164.81, true, 0.12], [220, false, 0.05]];
+/** Each voice rounded to whole cycles in the loop so it joins seamlessly; the first of two passes
+ * settles the filter, the second is the loop (no click at the seam). */
+const VOICES: [number, "sine" | "triangle", number][] = [[110, "sine", 0.2], [164.81, "sine", 0.12], [220, "triangle", 0.05]];
 const N = Math.round(LOOP_S * RATE);
-const FS = VOICES.map(([f]) => Math.round(f * LOOP_S) / LOOP_S);
-const padBuf = new Float32Array(N);
-let padPos = 0;
-let padY = 0;
-function renderPad(count: number): boolean {
-  const end = Math.min(2 * N, padPos + count);
-  for (; padPos < end; padPos++) {
-    const i = padPos % N, t = i / RATE;
-    let x = 0;
-    for (let v = 0; v < 3; v++) {
-      const ph = (FS[v]! * t) % 1;
-      x += VOICES[v]![2] * (VOICES[v]![1] ? Math.sin(2 * Math.PI * ph) : 1 - 4 * Math.abs(ph - 0.5));
-    }
-    const cutoff = 520 + 140 * Math.sin(2 * Math.PI * 0.07 * t);
-    padY += ((2 * Math.PI * cutoff) / RATE) * (x - padY);
-    if (padPos >= N) padBuf[i] = padY;
+async function renderPad(): Promise<AudioClip> {
+  const off = new OfflineAudioContext(1, 2 * N, RATE);
+  const lp = off.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 520;
+  const lfo = off.createOscillator();
+  lfo.frequency.value = 0.07;
+  const depth = off.createGain();
+  depth.gain.value = 140;
+  lfo.connect(depth).connect(lp.frequency);
+  lfo.start();
+  for (const [f, type, level] of VOICES) {
+    const osc = off.createOscillator();
+    osc.type = type;
+    osc.frequency.value = Math.round(f * LOOP_S) / LOOP_S;
+    const g = off.createGain();
+    g.gain.value = level;
+    osc.connect(g).connect(lp);
+    osc.start();
   }
-  return padPos >= 2 * N;
+  lp.connect(off.destination);
+  const r = await off.startRendering();
+  return createClip([r.getChannelData(0).slice(N)], RATE);
 }
 let pad: AudioClip | null = null;
 let padStarted = false;
@@ -90,16 +94,9 @@ let unlocked = false;
 /** The first press (the browser build's audio unlock): the pad may start. */
 export function unlock(): void { unlocked = true; }
 
-/** Each frame once the mixer runs: the pad, rendered a slice a frame, then started. */
+/** Each frame: the pad starts once it is rendered, the mixer runs and a press came. */
 export function update(): void {
-  if (context.state !== "running") return; // rendering and starting the pad still waits for the mixer
-  if (!pad) {
-    if (!renderPad(8000)) return;
-    try { pad = createClip([padBuf], RATE); } catch (e) { console.warn(`audio: ${String(e)}`); padPos = 0; }
-    return;
-  }
-  if (!padStarted && unlocked) {
-    padStarted = true;
-    try { playClip(pad, { bus: "music", gain: 0.5, loop: true }); } catch { padStarted = false; }
-  }
+  if (context.state !== "running" || !pad || padStarted || !unlocked) return;
+  padStarted = true;
+  try { playClip(pad, { bus: "music", gain: 0.5, loop: true }); } catch { padStarted = false; }
 }

@@ -19,7 +19,7 @@ import * as audio from "./audio.ts";
 import { N, tr, pt } from "./i18n.ts";
 import * as platform from "./platform.ts";
 import {
-  accountToast, app, assistsOn, copyInvite, dailyDates, doHint, doUndo, exitLearn, goalText, handCard, hasNextLesson,
+  app, assistsOn, copyInvite, dailyDates, doHint, doUndo, exitLearn, goalText, handCard, hasNextLesson,
   lbLine, leaveToTitle, levelTitle, navBack, navTo, nextLesson, objectiveText, passSelected, playAgain, seatLabel,
   sess, setPaused, signIn, startPlay, toastState, type Mode, type ScreenName,
 } from "./main.ts";
@@ -29,10 +29,9 @@ import * as table from "./table.ts";
 // ------------------------------------------------------------------ layout
 interface Layout { lw: number; lh: number; sc: number; phone: boolean; shortLand: boolean }
 function layoutNow(): Layout {
-  const f = frame();
-  const sc = ui.preferences().scale;
-  const sa = f.safeArea;
-  const lw = Math.max(1, (f.width - sa.left - sa.right) / sc), lh = Math.max(1, (f.height - sa.top - sa.bottom) / sc);
+  const v = ui.viewport!();
+  const sc = v.scale;
+  const lw = Math.max(1, v.width), lh = Math.max(1, v.height);
   return { lw, lh, sc, phone: lw <= 700, shortLand: lw > lh && lh <= 500 };
 }
 const clamp = (v: number, a: number, b: number): number => Math.min(b, Math.max(a, v));
@@ -121,8 +120,8 @@ function titleScreen(L: Layout): void {
       para(sync ? `${name} · ${sync}` : name, L.lw - 32, ["player-chip", { text: { align: "center" } }], "player-chip");
     }
     const acct: Btn[] = [];
-    if (!platform.signedIn()) acct.push({ id: "btn-signin", text: pt("sh.signIn"), style: ["btn"], act: signIn });
-    else if (platform.inviteLink()) acct.push({ id: "btn-invite", text: pt("sh.invite"), style: ["btn"], act: copyInvite });
+    if (!platform.signedIn()) acct.push({ id: "btn-signin", text: pt("signIn"), style: ["btn"], act: signIn });
+    else if (platform.inviteLink()) acct.push({ id: "btn-invite", text: pt("invite"), style: ["btn"], act: copyInvite });
     if (acct.length) { gap(12); ui.row("account-row", () => { for (const b of acct) button(b); }, { spacing: 10 }); }
     gap(L.shortLand ? 14 : 34);
     ui.column("menu", () => {
@@ -431,12 +430,6 @@ function toasts(L: Layout): void {
     const h = H("toast", 40);
     ui.place("toast", { anchor: "top", y: Math.max(0, L.lh * 0.46 - h / 2) }, () => {
       track("toast", ui.style("toast").column("toast-box", () => { para(tt(), w - 36, ["toast-text", { text: { align: "center" } }], "toast-text"); }, { align: "center" }));
-    });
-  }
-  const at = accountToast.text;
-  if (at && app.screen === "title") {
-    ui.place("account-toast", { anchor: "bottom", y: 16 }, () => {
-      ui.style("account-toast").column("account-toast-box", () => { para(at(), w - 36, ["toast-text", { text: { align: "center" } }], "account-toast-text"); }, { align: "center" });
     });
   }
 }

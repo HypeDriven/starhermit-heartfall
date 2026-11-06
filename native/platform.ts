@@ -12,12 +12,11 @@
 //   are the runtime's Options now: the legacy keys are removed. The game has
 //   no options of its own;
 // - the player's name, the invite link, and posting a finished match's
-//   winning margin through score-script.js (a practice session whose socket
-//   carries { type: 'result', scores }, as the JS SDK's submitScores did)
+//   winning margin (leaderboards.submitScore; score-script.js range-checks it)
 //   with the rank on the board.
 import type { JsonValue } from "starhermit:engine";
-import { connectGame, inviteLink as fetchInviteLink, leaderboards, onPlayerChange, player, serverNow, serverTime, sessions } from "starhermit:platform";
-import { saves, settings as store, storage } from "starhermit:storage";
+import { inviteLink as fetchInviteLink, leaderboards, onPlayerChange, player, serverNow, serverTime } from "starhermit:platform";
+import { saves, settings as store } from "starhermit:storage";
 import { Store as S, type Doc } from "./classic.ts";
 
 // --- the save ------------------------------------------------------------------------------
@@ -111,7 +110,6 @@ function refreshPlayer(): void {
   invite = null;
   if (!player()) return;
   fetchInviteLink().then((u) => { invite = u; }, () => { invite = null; });
-  void marginBoard().catch(() => null);
 }
 let wasSignedIn = false;
 let signedOutCb: (() => void) | null = null;
@@ -125,61 +123,15 @@ onPlayerChange(() => {
 });
 
 // --- the StarHermit winning-margin board -------------------------------------------------------
-const BOARD_KEY = "heartfall.board-id";
 const SCORE_KEY = "margin";
-let boardId: string | null = null;
-/** The winning-margin board's id: listed signed in, then kept on the device. */
-async function marginBoard(): Promise<string | null> {
-  if (boardId) return boardId;
-  if (player()) {
-    try {
-      const list = await leaderboards.list();
-      const b = list.find((x) => x.key === SCORE_KEY) ?? list[0];
-      if (b) { boardId = b.id; try { storage.set(BOARD_KEY, b.id); } catch { /* full */ } }
-    } catch { /* offline */ }
-  }
-  if (!boardId) { try { boardId = storage.getText(BOARD_KEY); } catch { boardId = null; } }
-  return boardId;
-}
 
-/** Signed in only: post a finished match's winning margin (may be negative) through score-script.js;
- * { posted, rank }. Never rejects. */
+/** Signed in only: post a finished match's winning margin (may be negative); { posted, rank }. Never rejects. */
 export async function postLeaderboard(margin: number): Promise<{ posted: boolean; rank: number | null }> {
-  const me = player();
-  if (!me) return { posted: false, rank: null };
-  const score = Math.max(-500, Math.min(500, Math.round(margin)));
-  let accepted: string[] = [];
+  if (!player()) return { posted: false, rank: null };
   try {
-    const sessionId = await sessions.practice();
-    accepted = await new Promise<string[]>((resolve) => {
-      const socket = connectGame(sessionId);
-      let done = false;
-      const finish = (list: string[]): void => {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        socket.close();
-        resolve(list);
-      };
-      const timer = setTimeout(() => finish([]), 15000);
-      socket.on("open", () => { socket.sendCommand({ type: "result", scores: { [SCORE_KEY]: score } }); });
-      socket.on("game", (data) => {
-        const d = data as { type?: string; accepted?: string[] } | null;
-        if (d && d.type === "result-ack") finish(Array.isArray(d.accepted) ? d.accepted : []);
-      });
-      socket.on("error", () => finish([]));
-      socket.on("stopped", () => finish([]));
-      socket.on("abandoned", () => finish([]));
-    });
+    const r = await leaderboards.submitScore(SCORE_KEY, Math.max(-500, Math.min(500, Math.round(margin))));
+    return { posted: r.accepted, rank: r.rank };
   } catch { return { posted: false, rank: null }; }
-  if (!accepted.includes(SCORE_KEY)) return { posted: false, rank: null };
-  try {
-    const id = await marginBoard();
-    if (!id) return { posted: true, rank: null };
-    const r = await leaderboards.entries(id, { pageSize: 100 });
-    const mine = r.items.find((e) => e.userId === me.userId);
-    return { posted: true, rank: mine ? mine.rank : null };
-  } catch { return { posted: true, rank: null }; }
 }
 
 // --- the platform's clock ------------------------------------------------------------------

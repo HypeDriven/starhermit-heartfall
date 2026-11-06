@@ -1,12 +1,12 @@
 // The browser build's pure game scripts, shared with the Node tests: the
 // seeded random streams, the rules engine (dealing, passing, tricks, scoring,
 // the AI seats and the hints), the content (Journey, challenges, practice,
-// dailies, lessons, achievements), the save model and the string tables
+// dailies, lessons, achievements) and the save model
 // (js/*.js, UMD), evaluated as classic scripts so their globals are this
 // module's exports.
 import { loadClassic } from "starhermit:script";
 
-for (const f of ["js/rng.js", "js/rules.js", "js/content.js", "js/store.js", "js/strings.js", "js/i18n.js", "js/platform-strings.js"]) loadClassic(f);
+for (const f of ["js/rng.js", "js/rules.js", "js/content.js", "js/store.js"]) loadClassic(f);
 
 // -- The shapes this client reads -------------------------------------------------
 export type Phase = "pass" | "play" | "done";
@@ -73,23 +73,10 @@ interface StoreApi {
   mergeProgress(a: Progress, b: Progress): Progress;
   mergeDocs(a: unknown, b: unknown): Doc | null;
 }
-interface I18nApi {
-  T(key: string, vars?: Record<string, string | number> | null): string;
-  setLocale(tag: string): string;
-  readonly lang: string;
-  locales: string[];
-}
-interface PlatformStringsApi {
-  platformStrings(lang: string): Record<string, string>;
-  fmtPlatform(s: string, vars?: Record<string, string | number>): string;
-}
-
 const g = globalThis as unknown as {
-  HFRules: RulesApi; HFContent: ContentApi; HFRNG: RngApi; HFStore: StoreApi; HFI18N: I18nApi; HFPlatformStrings: PlatformStringsApi;
+  HFRules: RulesApi; HFContent: ContentApi; HFRNG: RngApi; HFStore: StoreApi;
 };
 export const Rules = g.HFRules;
 export const Content = g.HFContent;
 export const RNG = g.HFRNG;
 export const Store = g.HFStore;
-export const I18n = g.HFI18N;
-export const PlatformStrings = g.HFPlatformStrings;

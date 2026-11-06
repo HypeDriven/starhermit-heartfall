@@ -58,7 +58,6 @@ let toastMs = 0;
 let nextAiAt = 0;
 let suspended = false;
 export const toastState = { text: null as (() => string) | null, until: 0 };
-export const accountToast = { text: null as (() => string) | null, until: 0 };
 
 // ------------------------------------------------------------------ helpers
 export function announce(text: string): void { if (text) ui.announce(text.slice(0, 500), { politeness: "polite" }); }
@@ -68,10 +67,13 @@ export function toast(text: () => string): void {
   toastState.until = toastMs + 2200;
   announce(text());
 }
-function accountNotice(text: () => string): void {
-  accountToast.text = text;
-  accountToast.until = frame().time + 3.5;
-  announce(text());
+/** The title's account notice, 3.5 s at the bottom; dismissed when the title closes (a toast stays where it was born). */
+let accountToast: ReturnType<NonNullable<typeof ui.toast>> = null;
+function accountNotice(text: string): void {
+  accountToast?.dismiss();
+  accountToast = null;
+  if (app.screen === "title") accountToast = ui.toast!(text, { duration: 3.5, style: ["account-toast", "toast-text"], dismissible: false });
+  else announce(text);
 }
 export function seatLabel(seat: number): string { return tr(C.seatName(seat)); } // 'You' translates; persona names stay
 export function cardLabel(id: number): string { return R.cardName(id); }
@@ -83,6 +85,7 @@ function show(name: ScreenName, focus: string | null = null): void {
   app.openedFrame = frame().frame;
   app.focusNext = focus;
   if (name !== "play") toastState.text = null; // no stale toasts over menus
+  if (name !== "title") { accountToast?.dismiss(); accountToast = null; }
   ui.setFocus(null);
 }
 /** The widget a screen focuses when it opens (its first choice), for keyboard and gamepad players. */
@@ -386,11 +389,11 @@ function postToLeaderboard(g: State): void {
   const sc = g.terminal!.scores;
   let opp = Infinity;
   for (let p = 1; p < sc.length; p++) opp = Math.min(opp, sc[p]!);
-  const posting = (): string => pt("lb.posting");
+  const posting = (): string => pt("leaderboardPosting");
   lbLine = posting;
   void platform.postLeaderboard(opp - sc[0]!).then((r) => {
     if (lbLine !== posting) return;
-    lbLine = () => (!r.posted ? pt("lb.notPosted") : r.rank ? pt("lb.rank", { rank: r.rank }) : pt("lb.posted"));
+    lbLine = () => (!r.posted ? pt("leaderboardNotPosted") : r.rank ? pt("leaderboardRank", { rank: r.rank }) : pt("leaderboardPosted"));
   });
 }
 
@@ -421,7 +424,7 @@ export function copyInvite(): void {
   if (!link) return;
   let ok = false;
   try { clipboard.writeText(link); ok = true; } catch { ok = false; }
-  accountNotice(() => (ok ? pt("sh.copied") : pt("sh.copyFailed", { link })));
+  accountNotice(ok ? pt("inviteCopied") : pt("inviteLink", { link }));
 }
 export function signIn(): void { audio.play("ui-click"); void requestSignIn().catch(() => undefined); }
 export { accountNotice };
@@ -456,7 +459,7 @@ onStart(() => {
   setFixedRate(60);
   initStyles();
   platform.initPlatform();
-  platform.onSignedOut(() => accountNotice(() => pt("sh.signedOut")));
+  platform.onSignedOut(() => accountNotice(pt("signedOut")));
   platform.syncTime();
   audio.loadSfx();
   table.loadArt();
@@ -477,6 +480,5 @@ onUpdate(() => {
   applyLook();
   audio.update();
   if (toastState.text && (app.screen !== "play" || toastState.until <= toastMs)) toastState.text = null;
-  if (accountToast.text && accountToast.until < frame().time) accountToast.text = null;
 });
 onRender(() => { drawScreens(); });
