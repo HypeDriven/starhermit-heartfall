@@ -1,3 +1,6 @@
+import { localizedDrawOptions as __l10nDrawOptions } from "./l10n/font.ts";
+// localization-runtime:attached
+import { localizedCanvasFont as __l10nCanvasFont } from "./l10n/font.ts";
 // The browser build's canvases (js/game.js drawTable / drawTitleFx with
 // js/tablefx.js) as starhermit:draw, drawn each frame behind the UI:
 // - the play table: the painted plate (assets/table.webp, cover-fitted as
@@ -218,7 +221,7 @@ export function drawTableFront(g: State, top: Band | null, bottom: Band | null, 
   for (let p = 0; p < g.players; p++) {
     const [fx, fy] = seatPos(p, g.players);
     const label = `${seatLabel(p)} (${g.hands[p]!.length})`;
-    const tw = draw.measureText(label, { size }).width;
+    const tw = draw.measureText(label, __l10nDrawOptions({ size })).width;
     const half = tw / 2 + pad;
     const lx = Math.max(half, Math.min(W - half, fx * W));
     let ly = fy * H - 24 * k;
@@ -235,7 +238,7 @@ export function drawTableFront(g: State, top: Band | null, bottom: Band | null, 
     const tilt = detailed ? ((((e.card * 37) % 9) - 4) * Math.PI) / 180 : 0;
     trickCard(e.card, cx, cy, tilt, k);
   }
-  draw.text(roundLine, 12 * k, 12 * k, { size: 13 * k, color: "#cfe0ff" });
+  draw.text(roundLine, 12 * k, 12 * k, __l10nDrawOptions({ size: 13 * k, color: "#cfe0ff" }));
 }
 
 /** A seat's name: a pill with Card detail, gold when active (glowing with Bloom), else a drop shadow. */
@@ -252,7 +255,7 @@ function seatName(text: string, x: number, y: number, tw: number, active: boolea
   if (glowOn) glowAt(x, y, Math.max(tw * 0.6, 18 * k), [247, 201, 72], 0.35);
   const opts: draw.TextOptions = { size, color: active ? "#f7c948" : "#cfd8d2", align: "center" };
   if (!glowOn && L && L.shadows !== "off") opts.shadow = { color: "#000000d9", x: 0, y: Math.max(1, k) };
-  draw.text(text, x, y - draw.measureText(text, { size }).height / 2, opts);
+  draw.text(text, x, y - draw.measureText(text, __l10nDrawOptions({ size })).height / 2, __l10nDrawOptions(opts));
 }
 
 // -- trick cards: painted once per card, look and scale (tablefx.js drawCard) --------------------
@@ -303,10 +306,10 @@ function cardFace(card: number, k: number): { canvas: OffscreenCanvas; margin: n
     ctx.stroke();
     ctx.fillStyle = ink;
     ctx.textAlign = "left"; ctx.textBaseline = "top";
-    ctx.font = "600 10px system-ui, sans-serif";
+    ctx.font = __l10nCanvasFont("600 10px system-ui, sans-serif");
     ctx.fillText(label, -CW / 2 + 5, -CH / 2 + 5);
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.font = "26px system-ui, sans-serif";
+    ctx.font = __l10nCanvasFont("26px system-ui, sans-serif");
     ctx.fillText(label, 0, 2);
     // Clear-coat sheen across the upper left.
     ctx.save();
@@ -322,7 +325,7 @@ function cardFace(card: number, k: number): { canvas: OffscreenCanvas; margin: n
     ctx.shadowColor = "transparent";
     ctx.fillStyle = ink;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.font = "26px system-ui, sans-serif";
+    ctx.font = __l10nCanvasFont("26px system-ui, sans-serif");
     ctx.fillText(label, 0, 0);
   }
   const out = { canvas: c, margin };
@@ -369,5 +372,5 @@ export function drawHandCard(r: { x: number; y: number }, w: number, h: number, 
   const size = (c.small ? 14 : 20) * k;
   const ink = R.isPenalty(c.card) ? "#b3372c" : "#1a2340";
   const inkA = c.dim ? ink + "80" : ink;
-  draw.text(R.cardName(c.card), x + Math.min(w, labelW) / 2, y + (c.small ? 4 : 8) * k, { size, color: inkA, align: "center" });
+  draw.text(R.cardName(c.card), x + Math.min(w, labelW) / 2, y + (c.small ? 4 : 8) * k, __l10nDrawOptions({ size, color: inkA, align: "center" }));
 }

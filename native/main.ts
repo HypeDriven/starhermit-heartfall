@@ -1,3 +1,4 @@
+import { withLanguageRender as __l10nRender } from "./l10n/menu.ts";
 // Heartfall on the StarHermit engine: the entry module (starhermit.txt
 // engine.entry), played natively by the StarHermit client and in browsers
 // by the engine's web runtime. The rules, content and save model are the
@@ -481,4 +482,8 @@ onUpdate(() => {
   audio.update();
   if (toastState.text && (app.screen !== "play" || toastState.until <= toastMs)) toastState.text = null;
 });
-onRender(() => { drawScreens(); });
+onRender(__l10nRender(() => { drawScreens(); }));
+
+// localization-runtime:menu
+import { installLanguageMenu as __installLanguageMenu } from "./l10n/menu.ts";
+__installLanguageMenu(false);
