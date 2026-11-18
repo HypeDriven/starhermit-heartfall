@@ -17,7 +17,7 @@ burns out — unless you can take *every* penalty and turn the night inside out.
 | Genre | Trick-taking card game (Hearts family), single-player vs. AI |
 | Players | 1 human (seat 0) + 1–3 AI seats; tables of 2, 3 or 4 |
 | Session length | 90 s (a Learn lesson) to ~12 min (a 100-point Journey match); one round is ~60–90 s |
-| Platforms | A StarHermit engine script game (engine 1.39.0, host API 1.39): played natively by the StarHermit client and in browsers by the engine's web runtime, desktop and mobile, portrait and landscape; offline-capable |
+| Platforms | A StarHermit engine script game (engine 1.44.1, host API 1.44): played natively by the StarHermit client and in browsers by the engine's web runtime, desktop and mobile, portrait and landscape; offline-capable |
 | Rendering | `starhermit:draw` for the painted table, its light, fireflies, seat labels and trick cards (faces painted once into `starhermit:canvas` canvases); `starhermit:ui` (immediate mode) for every screen, the HUD, the hand and the overlays. Looks per graphics level (§8) |
 | Audio | `starhermit:audio`: 20 authored Opus one-shots on the effects/interface buses + the ambient pad, rendered once into a seamless loop, on the music bus |
 | Persistence | The runtime's save (`starhermit:storage` `saves`): progress on the device and, signed in, in the player's cloud slot |
@@ -26,7 +26,7 @@ burns out — unless you can take *every* penalty and turn the night inside out.
 
 | Path | Contents |
 |---|---|
-| `starhermit.txt` | Manifest: name, description, owner, `server=score-script.js`, version, contentVersion, cover, `launch=index.html`, `engine.*` (api 1, entry `native/main.ts`, version 1.39.0, minor 32, capabilities platform/storage/clipboard), `control.*` keys and `engine.gamepad.*` pads |
+| `starhermit.txt` | Manifest: name, description, owner, `server=score-script.js`, version, contentVersion, cover, `launch=index.html`, `engine.*` (api 1, entry `native/main.ts`, version 1.44.1, minor 32, capabilities platform/storage/clipboard), `control.*` keys and `engine.gamepad.*` pads |
 | `index.html`, `starhermit-files.json` | The engine's web loader and file index, written by `npm run package` (`starhermit package --web .`); never edited by hand |
 | `native/main.ts` | Entry: navigation, the match session (passes, plays, AI seats on fixed steps, hint/undo, lesson goals), results, achievements, leaderboard posting, input actions, lifecycle |
 | `native/screens.ts` | Every screen and overlay as `starhermit:ui`: title, modes, the five lists, Help, the play HUD and hand, pause / lesson / results overlays, toasts |
@@ -633,3 +633,9 @@ screen. `~/games/tools/engine-web-smoke.mjs` checks start-up at desktop and phon
 The string tables include complete regional variants for `fr-BE`, `de-BE`, `en-SG`, `en-HK`, `en-BQ`, `es-CO`, `de-IT`, `fr-IT`, `es-CL`, `es-AR`, `es-EC`, `de-BR`. These reuse the corresponding existing translations in their language family. The runtime can resolve the exact regional tag. Language selection is available from the game’s Options panel or F2 and is saved per player in `ui.language`. Changes apply during play. Additional national, regional and indigenous language packs are only shipped once every English message has a translation with intact placeholders and markup. Complete additional language tables: `ja-JP`, `nl-BE`, `zh-SG`, `ms-SG`, `ta-SG`, `zh-HK`, `yue-HK`, `nl-NL`, `fi-FI`, `sv-FI`, `et-EE`, `id-ID`, `vi-VN`, `da-DE`, `lb-BE`, `co-FR`, `eu-FR`, `ca-FR`, `oc-FR`, `sl-IT`, `ca-IT`, `oc-IT`, `ca-ES`, `eu-ES`, `gl-ES`, `su-ID`, `bew-ID`, `km-VN`, `ru-FI`, `ru-EE`, `fur-IT`.
 
 <!-- regional-localization:end -->
+
+## Engine 1.44.1
+
+Browser play uses the WebGPU-only StarHermit 1.44.1 web runtime. Automatic ray-traced shadows are enabled on supported Vulkan devices, with mapped-shadow fallbacks elsewhere. Packaging creates block-compressed runtime textures and compressed glTF copies, retaining original image fallbacks.
+
+The help screen replays through retained native UI while its contents, options, layout and key bindings are unchanged.
