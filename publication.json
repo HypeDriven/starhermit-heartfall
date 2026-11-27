@@ -12,7 +12,7 @@
     "metadataSource": "starhermit.txt",
     "createdAt": "2026-09-01T07:01:01.318254+00:00",
     "coverArtSource": "manifest",
-    "coverArtUpdatedAt": "2026-11-26T20:40:02.82608+00:00",
+    "coverArtUpdatedAt": "2026-11-27T17:06:45.683334+00:00",
     "submittedByUserId": "2712e04e-461b-4d23-81ae-e40b429128a8",
     "submittedByUsername": "starhermit",
     "hosting": {
@@ -22,9 +22,9 @@
       "pinnedCommitSha": null,
       "deployedCommitSha": null,
       "deployError": null,
-      "deployedAt": "2026-11-26T20:40:02.81498+00:00",
+      "deployedAt": "2026-11-27T17:06:45.672244+00:00",
       "externalLaunchUrl": null,
-      "engineVersion": "1.51.0",
+      "engineVersion": "1.53.0",
       "deployWarning": null
     },
     "description": "Pass cards, follow suit, and avoid penalty cards or shoot the moon in a classic game of Hearts.",
@@ -36,19 +36,19 @@
     "links": [],
     "isDisabled": false
   },
-  "publishedAt": "2026-11-26T20:40:03.015Z",
-  "sourceCommit": "3b8ac9735b7a0ff7bfa1d7143746419fb47b2a17",
-  "bytesReceived": 5798322,
-  "archiveSha256": "b8b66e90850c2a432c7e34395ac0eb60c514399b0167163c720381d7533ef7d2",
+  "publishedAt": "2026-11-27T17:06:45.853Z",
+  "sourceCommit": "bc653b3f91eaa02410ff970fcdbfca1b34b7a28c",
+  "bytesReceived": 5798336,
+  "archiveSha256": "acb2978d915547a04ad49ddc6ef9dd47d1350a0ccea8d06a2910367c6206472c",
   "indexSha256": "7ac2c49247b6d0ef5067e84209d0cdf7e1d6b66727edc09aa455eb643214417d",
   "result": {
     "clientPublished": true,
     "serverImageLoaded": false,
     "imageDigest": null,
-    "bytesReceived": 5798322,
+    "bytesReceived": 5798336,
     "mode": "replace",
     "filesRemoved": 0,
-    "engineVersion": "1.51.0",
+    "engineVersion": "1.53.0",
     "deployWarning": null
   },
   "liveVerification": {
